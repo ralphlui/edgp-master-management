@@ -22,7 +22,7 @@ import org.springframework.web.cors.CorsConfiguration;
 @EnableWebSecurity
 public class EDGPMasterdataManagementSecurityConfig {
 	
-	private static final String[] SECURED_URLs = { "/api/masterdata/**" };
+	private static final String[] SECURED_URLs = { "/api/master/**" };
 
 	@Value("${client.url}")
 	private String allowedOrigin;
