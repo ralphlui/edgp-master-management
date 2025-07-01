@@ -40,7 +40,7 @@ public class DynamicTableRegistryController {
 	String activityTypePrefix;
 	
 
-	@GetMapping(value = "/categories", produces = "application/json")
+	@GetMapping(value = "/dynamic-tables", produces = "application/json")
 	public ResponseEntity<APIResponse<List<String>>> getAllActiveRoleList(
 			@RequestHeader("Authorization") String authorizationHeader) {
 

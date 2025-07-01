@@ -26,7 +26,7 @@ import java.util.Date;
 
 @Service
 @RequiredArgsConstructor
-public class JwtService {
+public class JWTService {
 	
 	private final ApplicationContext context;
 	

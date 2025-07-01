@@ -10,7 +10,7 @@ import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.*;
-import sg.edu.nus.iss.edgp.masterdata.management.jwt.JwtService;
+import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IAuditService;
 
 @RequiredArgsConstructor
@@ -19,7 +19,7 @@ public class AuditService implements IAuditService {
 
 	private static final Logger logger = LoggerFactory.getLogger(AuditService.class);
 
-	private final JwtService jwtService;
+	private final JWTService jwtService;
 	
 	private final SQSPublishingService sqsPublishingService;
 
