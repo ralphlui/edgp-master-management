@@ -50,10 +50,7 @@ public class JWTFilter extends OncePerRequestFilter {
 	    
 	    userID = AuditLogInvalidUser.INVALID_USER_ID.toString();
 	    userName = AuditLogInvalidUser.INVALID_USER_NAME.toString();
-	    String requestURI = request.getRequestURI(); 
-
-		 
-		
+	   
 		if (authHeader == null || !authHeader.startsWith("Bearer ")) {
 			handleException(response, "Authorization header is missing or invalid.",
 					HttpServletResponse.SC_UNAUTHORIZED, "");

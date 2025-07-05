@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.CSVFormat;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.ITemplateService;
 
@@ -34,7 +34,7 @@ public class TemplateService implements ITemplateService {
 
 	@Override
 	public void createTableFromCsvTemplate(MultipartFile file,String tableName) {
-		 List<CSVFormat> fields = parseCsvTemplate(file);
+		 List<TemplateFileFormat> fields = parseCsvTemplate(file);
 	       // String tableName = generateTableName(file.getOriginalFilename());
 	        String createSql = buildCreateTableSQL(tableName.toLowerCase(), fields);
 	        jdbcTemplate.execute(createSql);
@@ -42,8 +42,8 @@ public class TemplateService implements ITemplateService {
 	}
 
 	@Override
-	public List<CSVFormat> parseCsvTemplate(MultipartFile file) {
-		List<CSVFormat> fields = new ArrayList<>();
+	public List<TemplateFileFormat> parseCsvTemplate(MultipartFile file) {
+		List<TemplateFileFormat> fields = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
             String line;
             boolean skipHeader = true;
@@ -61,7 +61,7 @@ public class TemplateService implements ITemplateService {
                 String dataType = parts[2].trim().toUpperCase();
                 int length = Integer.parseInt(parts[3].trim());
 
-                fields.add(new CSVFormat(fieldName,description, dataType, length));
+                fields.add(new TemplateFileFormat(fieldName,description, dataType, length));
             }
         } catch (IOException e) {
 			
@@ -82,7 +82,7 @@ public class TemplateService implements ITemplateService {
 	}
  
 
-    private String buildCreateTableSQL(String tableName, List<CSVFormat> fields) {
+    private String buildCreateTableSQL(String tableName, List<TemplateFileFormat> fields) {
         String columnDefs = fields.stream()
                 .map(f -> "`" + f.getFieldName() + "` " + mapDataType(f.getDataType(), f.getLength()))
                 .collect(Collectors.joining(", "));

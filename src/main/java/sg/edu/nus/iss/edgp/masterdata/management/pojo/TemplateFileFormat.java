@@ -8,7 +8,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Setter
 @Getter
-public class CSVFormat {
+public class TemplateFileFormat {
 	private String fieldName ="";
 	private String description ="" ;
 	private String dataType="";
