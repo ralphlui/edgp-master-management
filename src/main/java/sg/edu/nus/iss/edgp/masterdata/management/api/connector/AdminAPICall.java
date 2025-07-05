@@ -27,7 +27,7 @@ public class AdminAPICall {
 		try {
 			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
-			String url = adminURL.trim() + "/profile";
+			String url = adminURL.trim() + "/users/profile";
 			logger.info(url);
 
 			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))

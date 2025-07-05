@@ -1,6 +1,5 @@
 package sg.edu.nus.iss.edgp.masterdata.management.entity;
 
-import java.time.LocalDateTime;
 
 import org.hibernate.annotations.UuidGenerator;
 import jakarta.persistence.Column;
