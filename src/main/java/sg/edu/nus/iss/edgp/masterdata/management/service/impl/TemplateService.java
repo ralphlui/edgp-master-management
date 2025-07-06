@@ -3,9 +3,13 @@ package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -16,9 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.ITemplateService;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 
 @RequiredArgsConstructor
 @Service
@@ -31,6 +38,7 @@ public class TemplateService implements ITemplateService {
     private JdbcTemplate jdbcTemplate;
 	
 	private final MetadataRepository metadataRepository;
+	private final CSVParser csvParser;
 
 	@Override
 	public void createTableFromCsvTemplate(MultipartFile file,String tableName) {
@@ -83,10 +91,10 @@ public class TemplateService implements ITemplateService {
  
 
     private String buildCreateTableSQL(String tableName, List<TemplateFileFormat> fields) {
+       
         String columnDefs = fields.stream()
-                .map(f -> "`" + f.getFieldName() + "` " + mapDataType(f.getDataType(), f.getLength()))
+                .map(f -> "`" + f.getFieldName().toLowerCase() + "` " + mapDataType(f.getDataType(), f.getLength()))
                 .collect(Collectors.joining(", "));
-        
           
         String staticColumns = String.join(", ",
             "`id` INT AUTO_INCREMENT PRIMARY KEY",
@@ -126,5 +134,37 @@ public class TemplateService implements ITemplateService {
         }
     }
 
+	@Override
+	public String uploadCsvDataToTable( MultipartFile file,UploadRequest masterReq){
+		
+		try {
+		    List<Map<String, String>> rows = csvParser.parseCsv(file);
+		    if (rows.isEmpty()) return "CSV is empty.";
+
+		    String schema = jdbcTemplate.getDataSource().getConnection().getCatalog();
+		    if (!metadataRepository.tableExists(schema, masterReq.getCategoryName())) {
+		        throw new IllegalStateException("No table found. Please set up the table before uploading data.");
+		    }
+
+		    for (Map<String, String> row : rows) {
+		         
+		        row.put("organization_id", masterReq.getOrganizationId());
+		        row.put("policy_id", masterReq.getPolicyId());
+		        row.put("created_by", "");
+		        row.put("updated_by", "");
+		        
+		        metadataRepository.insertRow(masterReq.getCategoryName(), row);
+		    }
+		
+		    return "Inserted " + rows.size() + " rows "  + ".";
+		}catch (Exception e) {
+			logger.error("uploadCsvDataToTable exception... {}", e.toString());
+			throw new DynamicTableRegistryServiceException(e.getMessage());
+		}
+		
+
+	}
+
+	
 
 }

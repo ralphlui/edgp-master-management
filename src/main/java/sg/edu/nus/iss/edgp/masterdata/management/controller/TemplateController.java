@@ -1,6 +1,5 @@
 package sg.edu.nus.iss.edgp.masterdata.management.controller;
 
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,8 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.validation.annotation.Validated; 
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,8 +46,8 @@ public class TemplateController {
 	
 
     @PostMapping(value = "/create", produces = "application/json")
-    public ResponseEntity<APIResponse<String>>createDynamicTableByCsvTemplate(@RequestHeader("X-Table-Name") String tableName,
-    		@RequestHeader("Authorization") String authorizationHeader,@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<APIResponse<String>>createDynamicTableByCsvTemplate(
+    		@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-Table-Name") String tableName,@RequestParam("file") MultipartFile file) {
     	final String activityType = "CreateDynamicTableByCsvTemplate";
 
 		final HTTPVerb httpMethod = HTTPVerb.POST;
