@@ -1,11 +1,21 @@
 package sg.edu.nus.iss.edgp.masterdata.management.repository;
 
+import java.math.BigDecimal;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,22 +34,6 @@ public class MetadataRepository {
 		return count != null && count > 0;
 	}
 
-	public void insertRowO(String tableName, Map<String, String> rowData) {
-		if (rowData == null || rowData.isEmpty()) {
-			throw new IllegalArgumentException("No data provided for insert.");
-		}
-
-		String columns = rowData.keySet().stream().map(col -> "`" + col + "`").collect(Collectors.joining(", "));
-
-		String placeholders = rowData.keySet().stream().map(col -> "?").collect(Collectors.joining(", "));
-
-		String sql = "INSERT INTO `" + tableName + "` (" + columns + ") VALUES (" + placeholders + ")";
-		System.out.println("SQL: " + sql);
-		System.out.println("Values: " + rowData.values());
-
-		jdbcTemplate.update(sql, rowData.values().toArray());
-	}
-
 	public void insertRow(String tableName, Map<String, String> rowData) throws SQLException {
 
 		if (rowData == null || rowData.isEmpty()) {
@@ -47,19 +41,21 @@ public class MetadataRepository {
 		}
 
 		Set<String> insertColumns = rowData.keySet();
-		validateInsertColumns("location", insertColumns, jdbcTemplate);
- 
-	    
-		String columns = rowData.keySet().stream().map(col -> "`" + col + "`").collect(Collectors.joining(", "));
+		validateInsertColumns(tableName, insertColumns, jdbcTemplate);
 
-		String placeholders = rowData.keySet().stream().map(col -> "?").collect(Collectors.joining(", "));
+	    // Normalize and convert data types
+		Map<String, Object> insertData = normalizeInsertData(tableName, rowData, insertColumns);
+	    
+		String columns = insertData.keySet().stream().map(col -> "`" + col + "`").collect(Collectors.joining(", "));
+
+		String placeholders = insertData.keySet().stream().map(col -> "?").collect(Collectors.joining(", "));
 
 		String sql = "INSERT INTO `" + tableName + "` (" + columns + ") VALUES (" + placeholders + ")";
 		System.out.println("SQL: " + sql);
-		System.out.println("Values: " + Arrays.toString(rowData.values().toArray()));
-		System.out.println("Column count: " + rowData.keySet().size());
+		System.out.println("Values: " + Arrays.toString(insertData.values().toArray()));
+		System.out.println("Column count: " + insertData.keySet().size());
 
-		jdbcTemplate.update(sql, rowData.values().toArray());
+		jdbcTemplate.update(sql, insertData.values().toArray());
 	}
 	
 	public void validateInsertColumns(String tableName, Set<String> insertColumns, JdbcTemplate jdbcTemplate) {
@@ -82,6 +78,7 @@ public class MetadataRepository {
 	        .map(col -> col == null ? "" : col.trim().toLowerCase())
 	        .collect(Collectors.toSet());
 
+
 	    // 4. Check if any column in the insert list is not in the DB table
 	    Set<String> missingColumns = new HashSet<>(cleanedColumns);
 	    missingColumns.removeAll(dbColumns);
@@ -91,5 +88,62 @@ public class MetadataRepository {
 	    }
 	}
 	
-	 
+	private Map<String, Object>  normalizeInsertData(String tableName,Map<String, String> rawData, Set<String> numericColumns) throws SQLException {
+
+	    Map<String, Integer> columnTypeMap = getColumnTypes(tableName);
+		return rawData.entrySet().stream()
+	    	    .filter(e -> e.getKey() != null && !e.getKey().trim().isEmpty())
+	    	    .collect(Collector.of(
+	    	        LinkedHashMap::new,
+	    	        (map, e) -> {
+	    	            String col = e.getKey().trim();
+	    	            String val = e.getValue();
+	    	            Integer sqlType = columnTypeMap.get(col.toLowerCase());
+
+	    	            Object finalValue;
+	    	            if (sqlType == null) {
+	    	                finalValue = val == null ? "" : val.trim();
+	    	            } else if (val == null || val.trim().isEmpty()) {
+	    	                finalValue = (sqlType == Types.INTEGER || sqlType == Types.DECIMAL || sqlType == Types.NUMERIC ||
+	    	                              sqlType == Types.DOUBLE || sqlType == Types.FLOAT || sqlType == Types.DATE ||
+	    	                              sqlType == Types.TIMESTAMP) ? null : "";
+	    	            } else {
+	    	                try {
+	    	                    if (sqlType == Types.INTEGER) finalValue = Integer.parseInt(val.trim());
+	    	                    else if (sqlType == Types.DECIMAL || sqlType == Types.NUMERIC) finalValue = new BigDecimal(val.trim());
+	    	                    else if (sqlType == Types.DOUBLE || sqlType == Types.FLOAT) finalValue = Double.parseDouble(val.trim());
+	    	                    else if (sqlType == Types.DATE) finalValue = Date.valueOf(val.trim());
+	    	                    else if (sqlType == Types.TIMESTAMP) finalValue = Timestamp.valueOf(val.trim());
+	    	                    else finalValue = val.trim();
+	    	                } catch (Exception ex) {
+	    	                    finalValue = val.trim(); // fallback
+	    	                }
+	    	            }
+
+	    	            map.put(col, finalValue);
+	    	        },
+	    	        (map1, map2) -> { map1.putAll(map2); return map1; }
+	    	    ));
+
+	}
+
+	private Map<String, Integer> getColumnTypes(String tableName) throws SQLException {
+	    Map<String, Integer> columnTypes = new HashMap<>();
+
+	    try (
+	        Connection connection = jdbcTemplate.getDataSource().getConnection();
+	        PreparedStatement stmt = connection.prepareStatement("SELECT * FROM `" + tableName + "` LIMIT 1");
+	        ResultSet rs = stmt.executeQuery()
+	    ) {
+	        ResultSetMetaData metaData = rs.getMetaData();
+	        for (int i = 1; i <= metaData.getColumnCount(); i++) {
+	            String columnName = metaData.getColumnName(i).toLowerCase(); // normalize
+	            int columnType = metaData.getColumnType(i); // java.sql.Types
+	            columnTypes.put(columnName, columnType);
+	        }
+	    }
+
+	    return columnTypes;
+	}
+
 }
