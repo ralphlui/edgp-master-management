@@ -1,8 +1,11 @@
 package sg.edu.nus.iss.edgp.masterdata.management.repository;
 
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -43,6 +46,10 @@ public class MetadataRepository {
 			throw new IllegalArgumentException("No dynamic data provided for insert.");
 		}
 
+		Set<String> insertColumns = rowData.keySet();
+		validateInsertColumns("location", insertColumns, jdbcTemplate);
+ 
+	    
 		String columns = rowData.keySet().stream().map(col -> "`" + col + "`").collect(Collectors.joining(", "));
 
 		String placeholders = rowData.keySet().stream().map(col -> "?").collect(Collectors.joining(", "));
@@ -54,5 +61,35 @@ public class MetadataRepository {
 
 		jdbcTemplate.update(sql, rowData.values().toArray());
 	}
+	
+	public void validateInsertColumns(String tableName, Set<String> insertColumns, JdbcTemplate jdbcTemplate) {
+	    // 1. Get actual columns from the database table
+	    Set<String> dbColumns = jdbcTemplate.query("SELECT * FROM `" + tableName + "` LIMIT 1", rs -> {
+	        ResultSetMetaData meta = rs.getMetaData();
+	        Set<String> columns = new HashSet<>();
+	        for (int i = 1; i <= meta.getColumnCount(); i++) {
+	            columns.add(meta.getColumnName(i).toLowerCase());
+	        }
+	        return columns;
+	    });
 
+	    // 2. Filter out system-managed or backend-only columns
+	    Set<String> excluded = Set.of("id", "created_date", "updated_date");
+	    dbColumns.removeAll(excluded);
+
+	    // 3. Normalize insert columns
+	    Set<String> cleanedColumns = insertColumns.stream()
+	        .map(col -> col == null ? "" : col.trim().toLowerCase())
+	        .collect(Collectors.toSet());
+
+	    // 4. Check if any column in the insert list is not in the DB table
+	    Set<String> missingColumns = new HashSet<>(cleanedColumns);
+	    missingColumns.removeAll(dbColumns);
+
+	    if (!missingColumns.isEmpty()) {
+	        throw new IllegalArgumentException("Upload failed: Invalid column names found in your file: " + missingColumns);
+	    }
+	}
+	
+	 
 }
