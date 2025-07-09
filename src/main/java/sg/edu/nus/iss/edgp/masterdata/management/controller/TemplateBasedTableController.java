@@ -89,7 +89,7 @@ public class TemplateBasedTableController {
 
     @PostMapping(value = "/create", produces = "application/json")
     public ResponseEntity<APIResponse<String>>createDynamicTableByCsvTemplate(
-    		@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-Category-Name") String categoryName,@RequestParam("file") MultipartFile file) {
+    		@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-Category") String categoryName,@RequestParam("file") MultipartFile file) {
     	final String activityType = "CreateDynamicTableByCsvTemplate";
 
 		final HTTPVerb httpMethod = HTTPVerb.POST;

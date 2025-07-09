@@ -73,7 +73,7 @@ public class MetadataRepository {
 	    });
 
 	    // 2. Filter out system-managed or backend-only columns
-	    Set<String> excluded = Set.of("id", "created_date", "updated_date");
+	    Set<String> excluded = Set.of( "created_date", "updated_date");
 	    dbColumns.removeAll(excluded);
 
 	    // 3. Normalize insert columns

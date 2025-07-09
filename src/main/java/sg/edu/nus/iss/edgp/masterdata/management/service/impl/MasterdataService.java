@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -98,7 +99,7 @@ public class MasterdataService implements IMasterdataService {
                 .collect(Collectors.joining(", "));
           
         String staticColumns = String.join(", ",
-            "`id` INT AUTO_INCREMENT PRIMARY KEY",
+        	"`id` VARCHAR(36) PRIMARY KEY",
             "`organization_id` VARCHAR(255) NOT NULL",
             "`policy_id` VARCHAR(255) NOT NULL",
             "`created_by` VARCHAR(100)",
@@ -148,7 +149,7 @@ public class MasterdataService implements IMasterdataService {
 		    }
 
 		    for (Map<String, String> row : rows) {
-		         
+		    	row.put("id", UUID.randomUUID().toString());
 		        row.put("organization_id", masterReq.getOrganizationId());
 		        row.put("policy_id", masterReq.getPolicyId());
 		        row.put("created_by", "");
