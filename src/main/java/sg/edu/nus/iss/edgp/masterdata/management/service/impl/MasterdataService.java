@@ -23,7 +23,7 @@ import org.springframework.web.multipart.MultipartFile;
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
-import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
@@ -144,7 +144,7 @@ public class MasterdataService implements IMasterdataService {
 		    if (rows.isEmpty()) return "CSV is empty.";
 
 		    String schema = jdbcTemplate.getDataSource().getConnection().getCatalog();
-		    if (!metadataRepository.tableExists(schema, masterReq.getCategoryName())) {
+		    if (!metadataRepository.tableExists(schema, masterReq.getCategory())) {
 		        throw new IllegalStateException("No table found. Please set up the table before uploading data.");
 		    }
 
@@ -155,13 +155,13 @@ public class MasterdataService implements IMasterdataService {
 		        row.put("created_by", "");
 		        row.put("updated_by", "");
 		        
-		        metadataRepository.insertRow(masterReq.getCategoryName(), row);
+		        metadataRepository.insertRow(masterReq.getCategory(), row);
 		    }
 		
 		    return "Inserted " + rows.size() + " rows "  + ".";
 		}catch (Exception e) {
 			logger.error("uploadCsvDataToTable exception... {}", e.toString());
-			throw new DynamicTableRegistryServiceException(e.getMessage());
+			throw new MasterdataServiceException(e.getMessage());
 		}
 		
 

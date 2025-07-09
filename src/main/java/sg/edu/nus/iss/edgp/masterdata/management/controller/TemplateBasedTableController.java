@@ -23,7 +23,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.APIResponse;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.AuditLogInvalidUser;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.HTTPVerb;
-import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicTableRegistryService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
@@ -77,7 +77,7 @@ public class TemplateBasedTableController {
 			}
 
 		} catch (Exception e) {
-			message = e instanceof DynamicTableRegistryServiceException ? e.getMessage() : UNEXPECTED_ERROR;
+			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
 			
 	        logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
 	        auditDTO.setRemarks(e.getMessage());
@@ -109,7 +109,7 @@ public class TemplateBasedTableController {
             
         } catch (Exception e) {
             
-            message = e instanceof DynamicTableRegistryServiceException ? e.getMessage() : UNEXPECTED_ERROR;
+            message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
 			
 	        logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
 	        auditDTO.setRemarks(e.getMessage());

@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.entity.DynamicTableRegistry;
-import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.DynamicTableRegistryRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IDynamicTableRegistryService;
 
@@ -40,7 +40,7 @@ public class DynamicTableRegistryService implements IDynamicTableRegistryService
 	
 	} catch (Exception e) {
 		logger.error("findCategories exception... {}", e.toString());
-		throw new DynamicTableRegistryServiceException("An error occured while findCategories", e);
+		throw new MasterdataServiceException("An error occured while findCategories", e);
 	
 	}
 	}

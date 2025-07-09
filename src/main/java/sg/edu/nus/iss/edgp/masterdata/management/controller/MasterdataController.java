@@ -26,7 +26,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.AuditLogInvalidUser;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.HTTPVerb;
-import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
@@ -73,7 +73,7 @@ public class MasterdataController {
 			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData(message));
 		} catch (Exception e) {
 
-			message = e instanceof DynamicTableRegistryServiceException ? e.getMessage() : UNEXPECTED_ERROR;
+			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
 
 			logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
 			auditDTO.setRemarks(e.getMessage());
@@ -119,7 +119,7 @@ public class MasterdataController {
 			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result, message, result.size()));
 
 		} catch (Exception e) {
-			String errorMessage = (e instanceof DynamicTableRegistryServiceException) ? e.getMessage()
+			String errorMessage = (e instanceof MasterdataServiceException) ? e.getMessage()
 					: UNEXPECTED_ERROR;
 
 			logger.error(LOG_MESSAGE_FORMAT, errorMessage, e.getMessage());
