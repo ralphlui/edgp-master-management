@@ -21,17 +21,18 @@ import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
-import sg.edu.nus.iss.edgp.masterdata.management.service.ITemplateService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 
 @RequiredArgsConstructor
 @Service
-public class TemplateService implements ITemplateService {
+public class MasterdataService implements IMasterdataService {
 	
-	private static final Logger logger = LoggerFactory.getLogger(TemplateService.class);
+	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
 	
 	@Autowired
@@ -165,6 +166,41 @@ public class TemplateService implements ITemplateService {
 
 	}
 
+	@Override
+	public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
+		 
+        String tableName = resolveTableNameFromCategory(searchReq.getCategory());
+ 
+        return metadataRepository.getDataByPolicyAndOrgId(tableName, searchReq);
+    
+	}
 	
+	
+
+	private String resolveTableNameFromCategory(String category) {
+         
+        return category.toLowerCase();
+    }
+
+	@Override
+	public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
+		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
+		 
+	        return metadataRepository.getAllData(tableName, searchReq);
+	}
+
+	@Override
+	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
+		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
+		 
+	        return metadataRepository.getDataByPolicyId(tableName, searchReq);
+	}
+
+	@Override
+	public List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) {
+		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
+		 
+	        return metadataRepository.getDataByOrgId(tableName, searchReq);
+	}
 
 }

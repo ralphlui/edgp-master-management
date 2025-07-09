@@ -1,12 +1,16 @@
 package sg.edu.nus.iss.edgp.masterdata.management.controller;
 
+import java.util.List;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -15,40 +19,40 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.APIResponse;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.AuditLogInvalidUser;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.HTTPVerb;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.DynamicTableRegistryServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicTableRegistryService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.TemplateService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/mdm")
+@RequestMapping("/api/mdm/data")
 @Validated
 public class MasterdataController {
 
-	private final TemplateService templateService;
+	private final MasterdataService masterdataService;
 	private final AuditService auditService;
 
 	@Value("${audit.activity.type.prefix}")
 	String activityTypePrefix;
 
-	private static final Logger logger = LoggerFactory.getLogger(DynamicTableRegistryController.class);
+	private static final Logger logger = LoggerFactory.getLogger(MasterdataController.class);
 	private static final String INVALID_USER_ID = AuditLogInvalidUser.INVALID_USER_ID.toString();
 	private static final String API_ENDPOINT = "/api/mdm";
 	private static final String UNEXPECTED_ERROR = "An unexpected error occurred. Please contact support.";
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 
 	@PostMapping(value = "/upload", produces = "application/json")
-    public ResponseEntity<APIResponse<String>>uploadAndInsertCsvData(
+	public ResponseEntity<APIResponse<String>> uploadAndInsertCsvData(
 			@RequestHeader("Authorization") String authorizationHeader,
-			@RequestPart("UploadRequest") UploadRequest uploadReq,
-			@RequestParam("file") MultipartFile file) {
+			@RequestPart("UploadRequest") UploadRequest uploadReq, @RequestParam("file") MultipartFile file) {
 
 		final String activityType = "Upload Master Data";
 
@@ -59,12 +63,12 @@ public class MasterdataController {
 				httpMethod);
 
 		try {
-			message = templateService.uploadCsvDataToTable(file,uploadReq);
-			if(message.equals("")) {
-				message="Upload failed due to incorrect column format or missing values.";
+			message = masterdataService.uploadCsvDataToTable(file, uploadReq);
+			if (message.equals("")) {
+				message = "Upload failed due to incorrect column format or missing values.";
 				auditService.logAudit(auditDTO, 500, "", "");
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.error(message));
-               
+				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.error(message));
+
 			}
 			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData(message));
 		} catch (Exception e) {
@@ -75,6 +79,54 @@ public class MasterdataController {
 			auditDTO.setRemarks(e.getMessage());
 			auditService.logAudit(auditDTO, 500, message, authorizationHeader);
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
+		}
+	}
+
+	@GetMapping(value = "", produces = "application/json")
+	public ResponseEntity<APIResponse<List<Map<String, Object>>>> getUploadedData(
+			@RequestHeader("Authorization") String authorizationHeader,
+			@Valid @ModelAttribute SearchRequest searchRequest) {
+
+		final String activityType = "Get All Uploaded Data" + searchRequest.getCategory() + "List";
+		final HTTPVerb httpMethod = HTTPVerb.GET;
+		final String endpoint = API_ENDPOINT;
+
+		AuditDTO auditDTO = auditService.createAuditDTO(INVALID_USER_ID, activityType, activityTypePrefix, endpoint,
+				httpMethod);
+
+		try {
+			
+		    String policyId = searchRequest.getPolicyId();
+		    String orgId = searchRequest.getOrganizationId();
+
+		    boolean hasPolicyId = policyId != null && !policyId.isBlank();
+		    boolean hasOrgId = orgId != null && !orgId.isBlank();
+		    List<Map<String, Object>> result;
+			
+			if (hasPolicyId && hasOrgId) {
+				result= masterdataService.getDataByPolicyAndOrgId( searchRequest);
+		    } else if (hasPolicyId) {
+		    	result= masterdataService.getDataByPolicyId(searchRequest);
+		    } else if (hasOrgId) {
+		    	result= masterdataService.getDataByOrgId(searchRequest);
+		    } else {
+		    	result= masterdataService.getAllData(searchRequest);
+		    }
+			 
+			String message = result.isEmpty() ? "No data found." : "Successfully retrieved "+searchRequest.getCategory()+" data.";
+			auditService.logAudit(auditDTO, 200, message, authorizationHeader);
+
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result, message, result.size()));
+
+		} catch (Exception e) {
+			String errorMessage = (e instanceof DynamicTableRegistryServiceException) ? e.getMessage()
+					: UNEXPECTED_ERROR;
+
+			logger.error(LOG_MESSAGE_FORMAT, errorMessage, e.getMessage());
+			auditDTO.setRemarks(e.getMessage());
+			auditService.logAudit(auditDTO, 500, errorMessage, authorizationHeader);
+
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(errorMessage));
 		}
 	}
 

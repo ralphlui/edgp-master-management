@@ -1,16 +1,27 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.web.multipart.MultipartFile;
 
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 
-public interface ITemplateService {
+public interface IMasterdataService {
 	void createTableFromCsvTemplate(MultipartFile file,String tableName);
 	
 	List<TemplateFileFormat> parseCsvTemplate(MultipartFile file);
 	
     String uploadCsvDataToTable( MultipartFile file,UploadRequest uploadRequest) ;
+    
+    List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) ;
+    
+    
+    List<Map<String, Object>>  getAllData(SearchRequest searchReq) ;
+    
+   List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) ;
+   
+   List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) ; 
 }
