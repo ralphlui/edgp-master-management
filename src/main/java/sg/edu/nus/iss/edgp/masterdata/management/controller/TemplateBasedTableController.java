@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -51,6 +52,7 @@ public class TemplateBasedTableController {
 
 	
 	@GetMapping(value = "/category", produces = "application/json")
+	@PreAuthorize("hasAuthority('SCOPE_view:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<List<String>>> getAllCategory(
 			@RequestHeader("Authorization") String authorizationHeader) {
 
@@ -88,6 +90,7 @@ public class TemplateBasedTableController {
 	
 
     @PostMapping(value = "/create", produces = "application/json")
+    @PreAuthorize("hasAuthority('SCOPE_manage:mdm')")
     public ResponseEntity<APIResponse<String>>createDynamicTableByCsvTemplate(
     		@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-Category") String categoryName,@RequestParam("file") MultipartFile file) {
     	final String activityType = "CreateDynamicTableByCsvTemplate";

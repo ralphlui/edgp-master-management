@@ -54,7 +54,7 @@ public class MasterdataControllerTest {
         MockMultipartFile file = new MockMultipartFile("file", "test.csv", "text/csv", "id,name".getBytes());
 
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.uploadCsvDataToTable(file, uploadRequest)).thenReturn(successMessage);
+        when(masterdataService.uploadCsvDataToTable(file, uploadRequest,authorization)).thenReturn(successMessage);
 
         ResponseEntity<APIResponse<String>> response = controller.uploadAndInsertCsvData(authorization, uploadRequest, file);
 
@@ -68,7 +68,7 @@ public class MasterdataControllerTest {
         MockMultipartFile file = new MockMultipartFile("file", "test.csv", "text/csv", "id,name".getBytes());
 
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.uploadCsvDataToTable(file, uploadRequest)).thenReturn("");
+        when(masterdataService.uploadCsvDataToTable(file, uploadRequest,authorization)).thenReturn("");
 
         ResponseEntity<APIResponse<String>> response = controller.uploadAndInsertCsvData(authorization, uploadRequest, file);
 

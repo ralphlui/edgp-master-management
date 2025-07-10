@@ -14,7 +14,7 @@ public interface IMasterdataService {
 	
 	List<TemplateFileFormat> parseCsvTemplate(MultipartFile file);
 	
-    String uploadCsvDataToTable( MultipartFile file,UploadRequest uploadRequest) ;
+    String uploadCsvDataToTable( MultipartFile file,UploadRequest uploadRequest,String authorizationHeader) ;
     
     List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) ;
     

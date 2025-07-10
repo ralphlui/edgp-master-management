@@ -55,13 +55,13 @@ public class JWTService {
 		}
 
 	}
-	
+	/*
 	public PublicKey loadPublicKey() throws Exception {
 		byte[] keyBytes = Base64.getDecoder().decode(jwtConfig.getJWTPubliceKey());
 		KeyFactory keyFactory = KeyFactory.getInstance("RSA");
 		return keyFactory.generatePublic(new X509EncodedKeySpec(keyBytes));
 	}
-
+   */
 	
 	public String extractSubject(String token) throws JwtException, IllegalArgumentException, Exception {
 		// TODO Auto-generated method stub
@@ -76,8 +76,9 @@ public class JWTService {
 	
 	
 	public Claims extractAllClaims(String token) throws JwtException, IllegalArgumentException, Exception {
-		return Jwts.parser().verifyWith(this.loadPublicKey()).build().parseSignedClaims(token).getPayload();
+		return Jwts.parser().verifyWith(jwtConfig.loadPublicKey()).build().parseSignedClaims(token).getPayload();
 	}
+	
 	
 	
 	public Boolean validateToken(String token, UserDetails userDetails)

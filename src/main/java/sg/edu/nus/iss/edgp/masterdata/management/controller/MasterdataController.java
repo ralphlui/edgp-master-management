@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -50,6 +51,7 @@ public class MasterdataController {
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 
 	@PostMapping(value = "/upload", produces = "application/json")
+	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<String>> uploadAndInsertCsvData(
 			@RequestHeader("Authorization") String authorizationHeader,
 			@RequestPart("UploadRequest") UploadRequest uploadReq, @RequestParam("file") MultipartFile file) {
@@ -63,7 +65,8 @@ public class MasterdataController {
 				httpMethod);
 
 		try {
-			message = masterdataService.uploadCsvDataToTable(file, uploadReq);
+			
+			message = masterdataService.uploadCsvDataToTable(file, uploadReq,authorizationHeader);
 			if (message.equals("")) {
 				message = "Upload failed due to incorrect column format or missing values.";
 				auditService.logAudit(auditDTO, 500, "", "");
@@ -83,6 +86,7 @@ public class MasterdataController {
 	}
 
 	@GetMapping(value = "", produces = "application/json")
+	@PreAuthorize("hasAuthority('SCOPE_view:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>> getUploadedData(
 			@RequestHeader("Authorization") String authorizationHeader,
 			@Valid @ModelAttribute SearchRequest searchRequest) {

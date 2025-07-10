@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
@@ -41,6 +42,7 @@ public class MasterdataService implements IMasterdataService {
 	
 	private final MetadataRepository metadataRepository;
 	private final CSVParser csvParser;
+	private final JWTService jwtService;
 
 	@Override
 	public void createTableFromCsvTemplate(MultipartFile file,String tableName) {
@@ -137,9 +139,10 @@ public class MasterdataService implements IMasterdataService {
     }
 
 	@Override
-	public String uploadCsvDataToTable( MultipartFile file,UploadRequest masterReq){
+	public String uploadCsvDataToTable( MultipartFile file,UploadRequest masterReq,String authorizationHeader){
 		
 		try {
+			
 		    List<Map<String, String>> rows = csvParser.parseCsv(file);
 		    if (rows.isEmpty()) return "CSV is empty.";
 
@@ -147,13 +150,15 @@ public class MasterdataService implements IMasterdataService {
 		    if (!metadataRepository.tableExists(schema, masterReq.getCategory())) {
 		        throw new IllegalStateException("No table found. Please set up the table before uploading data.");
 		    }
+		    String jwtToken = authorizationHeader.substring(7);
+			String userId = jwtService.extractSubject(jwtToken);
 
 		    for (Map<String, String> row : rows) {
 		    	row.put("id", UUID.randomUUID().toString());
 		        row.put("organization_id", masterReq.getOrganizationId());
 		        row.put("policy_id", masterReq.getPolicyId());
-		        row.put("created_by", "");
-		        row.put("updated_by", "");
+		        row.put("created_by", userId);
+		        row.put("updated_by", userId);
 		        
 		        metadataRepository.insertRow(masterReq.getCategory(), row);
 		    }

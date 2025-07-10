@@ -38,6 +38,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
+import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
@@ -64,6 +65,9 @@ class MasterdataServiceTest {
 
 	@Mock
 	private Connection connection;
+	
+	@Mock
+	private JWTService jwtService;
 
 	@BeforeEach
 	void setup() throws Exception {
@@ -77,7 +81,7 @@ class MasterdataServiceTest {
 	@Test
 	void testUploadCsvDataToTable_success() throws Exception {
 		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
-
+		 String authorization = "Bearer token";
 		UploadRequest req = new UploadRequest();
 		req.setCategory("vendor");
 		req.setOrganizationId("ORG123");
@@ -89,7 +93,7 @@ class MasterdataServiceTest {
 		when(csvParser.parseCsv(any())).thenReturn(List.of(row));
 		when(metadataRepository.tableExists("test_schema", "vendor")).thenReturn(true);
 
-		String result = masterdataService.uploadCsvDataToTable(mockFile, req);
+		String result = masterdataService.uploadCsvDataToTable(mockFile, req,authorization);
 
 		assertEquals("Inserted 1 rows .", result);
 		verify(metadataRepository).insertRow(eq("vendor"), any());
@@ -98,7 +102,7 @@ class MasterdataServiceTest {
 	@Test
 	void testUploadCsvDataToTable_tableDoesNotExist() throws IOException {
 		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
-
+		String authorization = "Bearer token";
 		UploadRequest req = new UploadRequest();
 		req.setCategory("vendor");
 		req.setOrganizationId("ORG123");
@@ -108,7 +112,7 @@ class MasterdataServiceTest {
 		when(metadataRepository.tableExists(any(), eq("vendor"))).thenReturn(false);
 
 		Exception ex = assertThrows(MasterdataServiceException.class,
-				() -> masterdataService.uploadCsvDataToTable(mockFile, req));
+				() -> masterdataService.uploadCsvDataToTable(mockFile, req,authorization));
 
 		assertEquals("No table found. Please set up the table before uploading data.", ex.getMessage());
 	}
