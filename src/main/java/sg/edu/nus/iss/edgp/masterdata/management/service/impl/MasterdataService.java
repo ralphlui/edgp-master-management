@@ -3,13 +3,12 @@ package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -22,7 +21,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.aws.service.DynamoConstants;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
@@ -43,6 +44,9 @@ public class MasterdataService implements IMasterdataService {
 	private final MetadataRepository metadataRepository;
 	private final CSVParser csvParser;
 	private final JWTService jwtService;
+	private final DynamicDetailService dynamoService;
+	private final HeaderService headerService;
+    
 
 	@Override
 	public void createTableFromCsvTemplate(MultipartFile file,String tableName) {
@@ -112,10 +116,7 @@ public class MasterdataService implements IMasterdataService {
         
         return "CREATE TABLE IF NOT EXISTS `"  + tableName + "` (" + staticColumns + ", " + columnDefs + ")";
     }
-        
-     
-    
-
+       
     private String mapDataType(String type, int length) {
         switch (type.toUpperCase()) {
             case "CLNT":
@@ -137,40 +138,61 @@ public class MasterdataService implements IMasterdataService {
                 return "VARCHAR(" + length + ")";
         }
     }
+    
+    @Override
+    public UploadResult uploadCsvDataToTable(
+            MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
 
-	@Override
-	public String uploadCsvDataToTable( MultipartFile file,UploadRequest masterReq,String authorizationHeader){
-		
-		try {
-			
-		    List<Map<String, String>> rows = csvParser.parseCsv(file);
-		    if (rows.isEmpty()) return "CSV is empty.";
+        List<Map<String, Object>> allInsertedRows = new ArrayList<>();
 
-		    String schema = jdbcTemplate.getDataSource().getConnection().getCatalog();
-		    if (!metadataRepository.tableExists(schema, masterReq.getCategory())) {
-		        throw new IllegalStateException("No table found. Please set up the table before uploading data.");
-		    }
-		    String jwtToken = authorizationHeader.substring(7);
-			String userId = jwtService.extractSubject(jwtToken);
+        try {
+            List<Map<String, String>> rows = csvParser.parseCsv(file);
+            if (rows.isEmpty()) {
+                return new UploadResult("CSV is empty.", 0, Collections.emptyList());
+            }
 
-		    for (Map<String, String> row : rows) {
-		    	row.put("id", UUID.randomUUID().toString());
-		        row.put("organization_id", masterReq.getOrganizationId());
-		        row.put("policy_id", masterReq.getPolicyId());
-		        row.put("created_by", userId);
-		        row.put("updated_by", userId);
-		        
-		        metadataRepository.insertRow(masterReq.getCategory(), row);
-		    }
-		
-		    return "Inserted " + rows.size() + " rows "  + ".";
-		}catch (Exception e) {
-			logger.error("uploadCsvDataToTable exception... {}", e.toString());
-			throw new MasterdataServiceException(e.getMessage());
-		}
-		
+            String jwtToken = authorizationHeader.substring(7);
+            String uploadedBy = jwtService.extractSubject(jwtToken);
+            String fileName = file.getOriginalFilename();
+            String headerId = UUID.randomUUID().toString();
 
-	}
+            String headerTableName = DynamoConstants.UPLOAD_HEADER_TABLE_NAME;
+            if (!dynamoService.tableExists(headerTableName)) {
+                dynamoService.createTable(headerTableName);
+            }
+            headerService.saveHeader(headerTableName, headerId, fileName, uploadedBy);
+
+            String masterTableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+            if (!dynamoService.tableExists(masterTableName)) {
+                dynamoService.createTable(masterTableName);
+            }
+
+            for (Map<String, String> row : rows) {
+                row.put("id", UUID.randomUUID().toString());
+                row.put("organization_id", masterReq.getOrganizationId());
+                row.put("policy_id", masterReq.getPolicyId());
+                row.put("fileId", headerId);
+                row.put("created_by", uploadedBy);
+                row.put("updated_by", uploadedBy);
+
+                dynamoService.insertStagingMasterData(masterTableName, row);
+                allInsertedRows.add(new HashMap<>(row));
+            }
+
+            // Slice to top 50 for display
+            List<Map<String, Object>> top50 = allInsertedRows.stream()
+                    .limit(50)
+                    .collect(Collectors.toList());
+
+            String message = "Inserted " + allInsertedRows.size() + " rows successfully.";
+            return new UploadResult(message, allInsertedRows.size(), top50);
+
+        } catch (Exception e) {
+            logger.error("uploadCsvDataToTable exception: {}", e.toString());
+            throw new MasterdataServiceException("Upload failed: " + e.getMessage());
+        }
+    }
+
 
 	@Override
 	public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
@@ -180,8 +202,6 @@ public class MasterdataService implements IMasterdataService {
         return metadataRepository.getDataByPolicyAndOrgId(tableName, searchReq);
     
 	}
-	
-	
 
 	private String resolveTableNameFromCategory(String category) {
          

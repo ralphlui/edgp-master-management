@@ -30,6 +30,7 @@ public class MasterdataController {
 
 	private final MasterdataService masterdataService;
 	private final AuditService auditService;
+	
 
 	@Value("${audit.activity.type.prefix}")
 	String activityTypePrefix;
@@ -42,7 +43,7 @@ public class MasterdataController {
 
 	@PostMapping(value = "/upload", produces = "application/json")
 	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
-	public ResponseEntity<APIResponse<String>> uploadAndInsertCsvData(
+	public ResponseEntity<APIResponse<List<Map<String, Object>>>>  uploadAndInsertCsvData(
 			@RequestHeader("Authorization") String authorizationHeader,
 			@RequestPart("UploadRequest") UploadRequest uploadReq, @RequestParam("file") MultipartFile file) {
 
@@ -55,15 +56,16 @@ public class MasterdataController {
 				httpMethod);
 
 		try {
-			
-			message = masterdataService.uploadCsvDataToTable(file, uploadReq,authorizationHeader);
-			if (message.equals("")) {
+			 
+			UploadResult result = masterdataService.uploadCsvDataToTable(file, uploadReq,authorizationHeader);
+			if (result.getTotalRecord()< 1) {
 				message = "Upload failed due to incorrect column format or missing values.";
 				auditService.logAudit(auditDTO, 500, message, authorizationHeader);
 				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.error(message));
 
 			}
-			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData(message));
+			
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result.getData(), result.getMessage(), result.getTotalRecord()));
 		} catch (Exception e) {
 
 			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;

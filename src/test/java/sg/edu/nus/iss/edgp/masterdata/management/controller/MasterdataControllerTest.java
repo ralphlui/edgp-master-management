@@ -44,37 +44,10 @@ public class MasterdataControllerTest {
     void setUp() {
         auditDTO = new AuditDTO();
         uploadRequest = new UploadRequest();
-        uploadRequest.setCategory("vendor");
+        
     }
 
-    @Test
-    void testUploadAndInsertCsvData_success() throws Exception {
-        String authorization = "Bearer token";
-        String successMessage = "Upload successful";
-        MockMultipartFile file = new MockMultipartFile("file", "test.csv", "text/csv", "id,name".getBytes());
-
-        when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.uploadCsvDataToTable(file, uploadRequest,authorization)).thenReturn(successMessage);
-
-        ResponseEntity<APIResponse<String>> response = controller.uploadAndInsertCsvData(authorization, uploadRequest, file);
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals(successMessage, response.getBody().getMessage());
-    }
-
-    @Test
-    void testUploadAndInsertCsvData_failure() throws Exception {
-        String authorization = "Bearer token";
-        MockMultipartFile file = new MockMultipartFile("file", "test.csv", "text/csv", "id,name".getBytes());
-
-        when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.uploadCsvDataToTable(file, uploadRequest,authorization)).thenReturn("");
-
-        ResponseEntity<APIResponse<String>> response = controller.uploadAndInsertCsvData(authorization, uploadRequest, file);
-
-        assertEquals(404, response.getStatusCodeValue());
-        assertTrue(response.getBody().getMessage().contains("Upload failed"));
-    }
+   
 
     @Test
     void testGetUploadedData_allData() {

@@ -37,6 +37,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
@@ -83,7 +84,7 @@ class MasterdataServiceTest {
 		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
 		 String authorization = "Bearer token";
 		UploadRequest req = new UploadRequest();
-		req.setCategory("vendor");
+		
 		req.setOrganizationId("ORG123");
 		req.setPolicyId("POLICY123");
 
@@ -93,7 +94,7 @@ class MasterdataServiceTest {
 		when(csvParser.parseCsv(any())).thenReturn(List.of(row));
 		when(metadataRepository.tableExists("test_schema", "vendor")).thenReturn(true);
 
-		String result = masterdataService.uploadCsvDataToTable(mockFile, req,authorization);
+		UploadResult result = masterdataService.uploadCsvDataToTable(mockFile, req,authorization);
 
 		assertEquals("Inserted 1 rows .", result);
 		verify(metadataRepository).insertRow(eq("vendor"), any());
@@ -104,7 +105,7 @@ class MasterdataServiceTest {
 		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
 		String authorization = "Bearer token";
 		UploadRequest req = new UploadRequest();
-		req.setCategory("vendor");
+		 
 		req.setOrganizationId("ORG123");
 		req.setPolicyId("POLICY123");
 
