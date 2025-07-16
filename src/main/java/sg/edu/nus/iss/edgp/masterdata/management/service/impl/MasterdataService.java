@@ -30,6 +30,10 @@ import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
 @RequiredArgsConstructor
 @Service
@@ -43,43 +47,7 @@ public class MasterdataService implements IMasterdataService {
 	private final JWTService jwtService;
 	private final DynamicDetailService dynamoService;
 	private final HeaderService headerService;
-    
-
-
-	@Override
-	public List<TemplateFileFormat> parseCsvTemplate(MultipartFile file) {
-		List<TemplateFileFormat> fields = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(file.getInputStream()))) {
-            String line;
-            boolean skipHeader = true;
-            while ((line = reader.readLine()) != null) {
-                if (skipHeader) {
-                    skipHeader = false;
-                    continue;
-                }
-                String[] parts = line.split(",");
-                System.out.println(line);
-                if (parts.length < 4) continue;
-
-                String fieldName = parts[0].trim().replaceAll("[^a-zA-Z0-9_]", "_");
-                String description = parts[1].trim();
-                String dataType = parts[2].trim().toUpperCase();
-                int length = Integer.parseInt(parts[3].trim());
-
-                fields.add(new TemplateFileFormat(fieldName,description, dataType, length));
-            }
-        } catch (IOException e) {
-			
-			logger.error("parseCsvTemplate exception... {}", e.toString());
-		}
-        return fields;
-	}
 	
-	private String generateTableName(String filename) {
-        return "mdm_" + filename.toLowerCase()
-                .replace(".csv", "")
-                .replaceAll("[^a-z0-9_]", "_");
-    }
 	
 	
     @Override

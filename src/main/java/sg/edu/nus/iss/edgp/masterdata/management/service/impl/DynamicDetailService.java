@@ -30,25 +30,22 @@ public class DynamicDetailService implements IDynamicDetailService {
 	@Override
 	public void insertStagingMasterData(String tableName,Map<String, String> rawData) {
 	    if (rawData == null || rawData.isEmpty()) {
-	        throw new IllegalArgumentException("No dynamic data provided for insert.");
+	        throw new IllegalArgumentException("No data provided for insert.");
 	    }
 	    
 	   
 	    Map<String, AttributeValue> item = new HashMap<>();
 
-	    // Ensure partition key exists (e.g., "id")
 	    if (!rawData.containsKey("id")) {
 	        item.put("id", AttributeValue.builder().s(UUID.randomUUID().toString()).build());
 	    } else {
 	        item.put("id", AttributeValue.builder().s(rawData.get("id")).build());
 	    }
 
-	    // Convert each value to the appropriate AttributeValue
 	    for (Map.Entry<String, String> entry : rawData.entrySet()) {
 	        String column = entry.getKey();
 	        String value = entry.getValue();
-
-	        // Skip null/empty keys
+	        
 	        if (column == null || column.trim().isEmpty()) continue;
 
 	        AttributeValue attrVal = convertToAttributeValue(value);

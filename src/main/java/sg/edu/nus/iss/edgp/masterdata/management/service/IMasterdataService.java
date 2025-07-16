@@ -11,17 +11,14 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 
 public interface IMasterdataService {
-	 
-	List<TemplateFileFormat> parseCsvTemplate(MultipartFile file);
-	
-	UploadResult uploadCsvDataToTable( MultipartFile file,UploadRequest uploadRequest,String authorizationHeader) ;
-    
-    List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) ;
-    
-    
-    List<Map<String, Object>>  getAllData(SearchRequest searchReq) ;
-    
-   List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) ;
-   
-   List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) ; 
+
+	UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest uploadRequest, String authorizationHeader);
+
+	List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq);
+
+	List<Map<String, Object>> getAllData(SearchRequest searchReq);
+
+	List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq);
+
+	List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq);
 }

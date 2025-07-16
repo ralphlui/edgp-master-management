@@ -5,22 +5,19 @@ import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.*;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.*;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicTableRegistryService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
 
 @RestController
 @RequiredArgsConstructor
@@ -28,8 +25,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
 @Validated
 public class TemplateBasedTableController {
 
-	@Autowired
-    private MasterdataService templateService;
 	
 	@Value("${audit.activity.type.prefix}")
 	String activityTypePrefix;
@@ -41,7 +36,7 @@ public class TemplateBasedTableController {
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 	 
 	private final AuditService auditService;
-	private final DynamicTableRegistryService categoryService;
+	private final CategoryService categoryService;
 
 	
 	@GetMapping(value = "/category", produces = "application/json")
