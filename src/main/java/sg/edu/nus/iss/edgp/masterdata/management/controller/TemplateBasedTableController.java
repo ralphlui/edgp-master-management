@@ -81,36 +81,4 @@ public class TemplateBasedTableController {
 		}
 	}
 	
-
-    @PostMapping(value = "/create", produces = "application/json")
-    @PreAuthorize("hasAuthority('SCOPE_manage:mdm')")
-    public ResponseEntity<APIResponse<String>>createDynamicTableByCsvTemplate(
-    		@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-Category") String categoryName,@RequestParam("file") MultipartFile file) {
-    	final String activityType = "CreateDynamicTableByCsvTemplate";
-
-		final HTTPVerb httpMethod = HTTPVerb.POST;
-		String message = "";
-		String endPoint = API_ENDPOINT +"/create";
-		AuditDTO auditDTO = auditService.createAuditDTO(INVALID_USER_ID, activityType, activityTypePrefix, endPoint, httpMethod);
-
-    	try {
-    		 boolean exists = templateService.checkTableIfExists(categoryName.toLowerCase());
-    	      if(exists) {
-    	    	 message ="Table already exists."; 
-    	      }else {
-            templateService.createTableFromCsvTemplate(file,categoryName.toLowerCase());
-            message ="Table created successfully.";
-    	      }
-            return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData( message));
-            
-        } catch (Exception e) {
-            
-            message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
-			
-	        logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
-	        auditDTO.setRemarks(e.getMessage());
-	        auditService.logAudit(auditDTO, 500, message, authorizationHeader);
-	        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
-		}
-    }
 }

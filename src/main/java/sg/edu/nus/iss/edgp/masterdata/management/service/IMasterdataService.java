@@ -11,8 +11,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 
 public interface IMasterdataService {
-	void createTableFromCsvTemplate(MultipartFile file,String tableName);
-	
+	 
 	List<TemplateFileFormat> parseCsvTemplate(MultipartFile file);
 	
 	UploadResult uploadCsvDataToTable( MultipartFile file,UploadRequest uploadRequest,String authorizationHeader) ;

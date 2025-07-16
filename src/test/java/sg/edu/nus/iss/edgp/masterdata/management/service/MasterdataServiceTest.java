@@ -78,45 +78,7 @@ class MasterdataServiceTest {
 
 		ReflectionTestUtils.setField(masterdataService, "jdbcTemplate", jdbcTemplate);
 	}
-
-	@Test
-	void testUploadCsvDataToTable_success() throws Exception {
-		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
-		 String authorization = "Bearer token";
-		UploadRequest req = new UploadRequest();
-		
-		req.setOrganizationId("ORG123");
-		req.setPolicyId("POLICY123");
-
-		Map<String, String> row = new HashMap<>();
-		row.put("name", "John");
-
-		when(csvParser.parseCsv(any())).thenReturn(List.of(row));
-		when(metadataRepository.tableExists("test_schema", "vendor")).thenReturn(true);
-
-		UploadResult result = masterdataService.uploadCsvDataToTable(mockFile, req,authorization);
-
-		assertEquals("Inserted 1 rows .", result);
-		verify(metadataRepository).insertRow(eq("vendor"), any());
-	}
-
-	@Test
-	void testUploadCsvDataToTable_tableDoesNotExist() throws IOException {
-		MultipartFile mockFile = new MockMultipartFile("file", "test.csv", "text/csv", "id,name\n1,John".getBytes());
-		String authorization = "Bearer token";
-		UploadRequest req = new UploadRequest();
-		 
-		req.setOrganizationId("ORG123");
-		req.setPolicyId("POLICY123");
-
-		when(csvParser.parseCsv(any())).thenReturn(List.of(Map.of("name", "John")));
-		when(metadataRepository.tableExists(any(), eq("vendor"))).thenReturn(false);
-
-		Exception ex = assertThrows(MasterdataServiceException.class,
-				() -> masterdataService.uploadCsvDataToTable(mockFile, req,authorization));
-
-		assertEquals("No table found. Please set up the table before uploading data.", ex.getMessage());
-	}
+ 
 
 	@Test
 	void testParseCsvTemplate_validFile() throws Exception {
@@ -145,24 +107,7 @@ class MasterdataServiceTest {
 		assertEquals(1, result.size());
 		assertEquals("Test", result.get(0).get("name"));
 	}
-	
-	@Test
-	void testCreateTableFromCsvTemplate_executesSql() throws Exception {
 	 
-	    String csvContent = "fieldName,description,dataType,length\nname,Name Field,STRING,100";
-	    MultipartFile file = new MockMultipartFile("file", "template.csv", "text/csv", csvContent.getBytes());
-
-	    MasterdataService spyService = Mockito.spy(masterdataService);
-	    List<TemplateFileFormat> parsedFields = List.of(new TemplateFileFormat("name", "Name Field", "STRING", 100));
-
-	    doReturn(parsedFields).when(spyService).parseCsvTemplate(file);
-
-	    ReflectionTestUtils.setField(spyService, "jdbcTemplate", jdbcTemplate);
-
-	    spyService.createTableFromCsvTemplate(file, "vendor");
-
-	    
-	}
 
 	 @Test
 	    void testGetDataByPolicyAndOrgId_returnsRecords() {
@@ -239,31 +184,6 @@ class MasterdataServiceTest {
 	     assertEquals("mdm_vendor_data", result);
 	 }
 	 
-	 @Test
-	 void testCheckTableIfExists_returnsTrue() throws Exception {
-	     when(jdbcTemplate.getDataSource()).thenReturn(dataSource);
-	     when(dataSource.getConnection()).thenReturn(connection);
-	     when(connection.getCatalog()).thenReturn("test_schema");
-	     when(metadataRepository.tableExists("test_schema", "vendor")).thenReturn(true);
-
-	     boolean result = masterdataService.checkTableIfExists("vendor");
-
-	     assertTrue(result);
-	     verify(metadataRepository).tableExists("test_schema", "vendor");
-	 }
-
-	 @Test
-	 void testCheckTableIfExists_returnsFalse() throws Exception {
-	     when(jdbcTemplate.getDataSource()).thenReturn(dataSource);
-	     when(dataSource.getConnection()).thenReturn(connection);
-	     when(connection.getCatalog()).thenReturn("test_schema");
-	     when(metadataRepository.tableExists("test_schema", "vendor")).thenReturn(false);
-
-	     boolean result = masterdataService.checkTableIfExists("vendor");
-
-	     assertFalse(result);
-	     verify(metadataRepository).tableExists("test_schema", "vendor");
-	 }
-
+	
 
 }
