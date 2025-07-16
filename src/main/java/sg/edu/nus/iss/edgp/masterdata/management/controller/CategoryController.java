@@ -23,13 +23,13 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
 @RequiredArgsConstructor
 @RequestMapping("/api/mdm/tables")
 @Validated
-public class TemplateBasedTableController {
+public class CategoryController {
 
 	
 	@Value("${audit.activity.type.prefix}")
 	String activityTypePrefix;
 	
-	private static final Logger logger = LoggerFactory.getLogger(TemplateBasedTableController.class);	 
+	private static final Logger logger = LoggerFactory.getLogger(CategoryController.class);	 
 	private static final String INVALID_USER_ID = AuditLogInvalidUser.INVALID_USER_ID.toString();	
 	private static final String API_ENDPOINT = "/api/mdm/tables";
 	private static final String UNEXPECTED_ERROR = "An unexpected error occurred. Please contact support.";

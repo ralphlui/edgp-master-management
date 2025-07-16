@@ -1,4 +1,4 @@
-package sg.edu.nus.iss.edgp.masterdata.management.aws.service;
+package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
 public class DynamoConstants {
 	

@@ -24,7 +24,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
 
 
-@WebMvcTest(TemplateBasedTableController.class)
+@WebMvcTest(CategoryController.class)
 @AutoConfigureMockMvc(addFilters = false)
 class CategoryControllerTest {
 

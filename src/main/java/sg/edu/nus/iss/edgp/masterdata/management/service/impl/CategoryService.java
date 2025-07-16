@@ -9,9 +9,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
-import sg.edu.nus.iss.edgp.masterdata.management.aws.service.DynamoConstants;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.service.ICategoryService;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;

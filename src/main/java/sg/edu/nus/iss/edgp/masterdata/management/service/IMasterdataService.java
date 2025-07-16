@@ -8,7 +8,6 @@ import org.springframework.web.multipart.MultipartFile;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
 
 public interface IMasterdataService {
 

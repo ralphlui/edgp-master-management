@@ -6,14 +6,14 @@ import java.util.Map;
 
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
-public class CsvUploadHeader {
+public class CSVUploadHeader {
 
 	private final String id;
     private final String filename;
     private final String uploadedBy;
     private final String uploadDate;
 
-    public CsvUploadHeader(String id, String filename, String uploadedBy) {
+    public CSVUploadHeader(String id, String filename, String uploadedBy) {
         this.id = id;
         this.filename = filename;
         this.uploadedBy = uploadedBy;

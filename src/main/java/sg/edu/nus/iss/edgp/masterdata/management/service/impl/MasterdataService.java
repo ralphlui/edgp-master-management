@@ -1,9 +1,6 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.sql.SQLException;
+import java.math.BigDecimal; 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -14,22 +11,18 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
-import sg.edu.nus.iss.edgp.masterdata.management.aws.service.DynamoConstants;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.TemplateFileFormat;
-import sg.edu.nus.iss.edgp.masterdata.management.repository.MetadataRepository;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -41,8 +34,7 @@ public class MasterdataService implements IMasterdataService {
 	
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
-	
-	private final MetadataRepository metadataRepository;
+	private final DynamoDbClient dynamoDbClient;
 	private final CSVParser csvParser;
 	private final JWTService jwtService;
 	private final DynamicDetailService dynamoService;
@@ -103,41 +95,110 @@ public class MasterdataService implements IMasterdataService {
             throw new MasterdataServiceException("Upload failed: " + e.getMessage());
         }
     }
-
-
-	@Override
-	public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
-		 
-        String tableName = resolveTableNameFromCategory(searchReq.getCategory());
- 
-        return metadataRepository.getDataByPolicyAndOrgId(tableName, searchReq);
     
-	}
-
-	private String resolveTableNameFromCategory(String category) {
-         
-        return category.toLowerCase();
+    private List<Map<String, Object>> mapItems(List<Map<String, AttributeValue>> items) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Map<String, AttributeValue> item : items) {
+            Map<String, Object> row = new HashMap<>();
+            item.forEach((key, value) -> {
+                if (value.s() != null) row.put(key, value.s());
+                else if (value.n() != null) row.put(key, new BigDecimal(value.n()));
+                else if (value.bool() != null) row.put(key, value.bool());
+                else if (value.hasL()) row.put(key, value.l());
+                else if (value.hasM()) row.put(key, value.m());
+            });
+            result.add(row);
+        }
+        return result;
     }
 
-	@Override
-	public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
-		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
-		 
-	        return metadataRepository.getAllData(tableName, searchReq);
-	}
 
-	@Override
-	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
-		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
-		 
-	        return metadataRepository.getDataByPolicyId(tableName, searchReq);
-	}
 
-	@Override
-	public List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) {
-		 String tableName = resolveTableNameFromCategory(searchReq.getCategory());
-		 
-	        return metadataRepository.getDataByOrgId(tableName, searchReq);
-	}
+    @Override
+    public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
+    	
+    	String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+        if (!dynamoService.tableExists(tableName)) {
+        	logger.warn("Table {} does not exist.", tableName);
+            return Collections.emptyList();
+        }
+         
+        Map<String, AttributeValue> expressionValues = new HashMap<>();
+        expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
+        expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId()).build());
+
+        ScanRequest scanRequest = ScanRequest.builder()
+                .tableName(tableName)
+                .filterExpression("organization_id = :orgId AND policy_id = :policyId")
+                .expressionAttributeValues(expressionValues)
+                .build();
+
+        ScanResponse response = dynamoDbClient.scan(scanRequest);
+        return mapItems(response.items());
+    }
+
+    @Override
+    public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
+    	String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+        if (!dynamoService.tableExists(tableName)) {
+        	logger.warn("Table {} does not exist.", tableName);
+            return Collections.emptyList();
+        }
+       
+
+        Map<String, AttributeValue> expressionValues = Map.of(
+                ":policyId", AttributeValue.builder().s(searchReq.getPolicyId()).build()
+        );
+
+        ScanRequest scanRequest = ScanRequest.builder()
+                .tableName(tableName)
+                .filterExpression("policy_id = :policyId")
+                .expressionAttributeValues(expressionValues)
+                .build();
+
+        ScanResponse response = dynamoDbClient.scan(scanRequest);
+        return mapItems(response.items());
+    }
+
+    @Override
+    public List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) {
+    	String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+        if (!dynamoService.tableExists(tableName)) {
+        	logger.warn("Table {} does not exist.", tableName);
+            return Collections.emptyList();
+        }
+       
+
+        Map<String, AttributeValue> expressionValues = Map.of(
+                ":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build()
+        );
+
+        ScanRequest scanRequest = ScanRequest.builder()
+                .tableName(tableName)
+                .filterExpression("organization_id = :orgId")
+                .expressionAttributeValues(expressionValues)
+                .build();
+
+        ScanResponse response = dynamoDbClient.scan(scanRequest);
+        return mapItems(response.items());
+    }
+
+    @Override
+    public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
+    	String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+        if (!dynamoService.tableExists(tableName)) {
+        	logger.warn("Table {} does not exist.", tableName);
+            return Collections.emptyList();
+        }
+       
+
+        ScanRequest scanRequest = ScanRequest.builder()
+                .tableName(tableName)
+                .build();
+
+        ScanResponse response = dynamoDbClient.scan(scanRequest);
+        return mapItems(response.items());
+    }
+
 
 }
