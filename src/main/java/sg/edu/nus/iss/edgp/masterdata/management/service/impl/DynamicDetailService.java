@@ -1,16 +1,20 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IDynamicDetailService;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.AttributeAction;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValueUpdate;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
@@ -20,6 +24,8 @@ import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @RequiredArgsConstructor
 @Service
@@ -131,6 +137,67 @@ public class DynamicDetailService implements IDynamicDetailService {
 	            throw new RuntimeException("Interrupted while waiting for DynamoDB table to become active");
 	        }
 	    }
+	}
+	
+	@Override
+	public void insertValidatedMasterData(String tableName, Map<String, String> rowData) {
+	    Map<String, AttributeValue> item = rowData.entrySet().stream()
+	        .collect(Collectors.toMap(
+	            Map.Entry::getKey,
+	            e -> AttributeValue.builder().s(e.getValue()).build()
+	        ));
+
+	    PutItemRequest request = PutItemRequest.builder()
+	        .tableName(tableName)
+	        .item(item)
+	        .build();
+
+	    dynamoDbClient.putItem(request);
+	}
+
+	
+	
+	@Override
+	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId, String uploadedBy) {
+	    Map<String, AttributeValue> expressionValues = new HashMap<>();
+	    expressionValues.put(":fileId", AttributeValue.builder().s(fileId).build());
+	    expressionValues.put(":uploadedBy", AttributeValue.builder().s(uploadedBy).build());
+	    expressionValues.put(":isprocessed", AttributeValue.builder().n("0").build());
+
+	    ScanRequest scanRequest = ScanRequest.builder()
+	        .tableName(tableName)
+	        .filterExpression("fileId = :fileId  AND uploadedBy = :uploadedBy AND isprocessed = :isprocessed")
+	        .expressionAttributeValues(expressionValues)
+	        .build();
+
+	    List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
+
+        if (results.isEmpty()) {
+            throw new RuntimeException("Data not found in staging table." );
+        }
+
+	    return results;
+	}
+
+	
+    @Override
+	public void updateStagingProcessedStatus(String tableName, String id, String newStatus) {
+	    Map<String, AttributeValue> key = new HashMap<>();
+	    key.put("id", AttributeValue.builder().s(id).build());
+
+	    Map<String, AttributeValueUpdate> updates = new HashMap<>();
+	    updates.put("isprocessed", AttributeValueUpdate.builder()
+	        .value(AttributeValue.builder().s(newStatus).build())
+	        .action(AttributeAction.PUT)
+	        .build());
+
+	    UpdateItemRequest updateRequest = UpdateItemRequest.builder()
+	        .tableName(tableName)
+	        .key(key)
+	        .attributeUpdates(updates)
+	        .build();
+
+	    dynamoDbClient.updateItem(updateRequest);
 	}
 
 

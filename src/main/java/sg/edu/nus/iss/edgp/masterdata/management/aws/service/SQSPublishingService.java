@@ -14,6 +14,7 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 @RequiredArgsConstructor
 @Service
@@ -21,6 +22,9 @@ public class SQSPublishingService {
 
 	@Value("${aws.sqs.queue.audit.url}")
 	String auditQueueURL;
+	
+	@Value("${aws.sqs.queue.workflow.ingestion.url}")
+    String workflowIngestionQueueURL;
 	 
 	private final SqsClient sqsClient;
 
@@ -86,6 +90,29 @@ public class SQSPublishingService {
 	        return remarks; 
 	    }
 	}
+	
+	
+	 public void sendRecordToQueue(Map<String, String> messagePayload) {
+	        try {
+	            String jsonPayload = new ObjectMapper().writeValueAsString(messagePayload);
 
+	            SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
+	                    .queueUrl(workflowIngestionQueueURL)
+	                    .messageBody(jsonPayload)
+	                    .build();
+
+	            SendMessageResponse response = sqsClient.sendMessage(sendMsgRequest);
+
+	             
+	            if (response.sdkHttpResponse().isSuccessful()) {
+	                System.out.println("Message sent. ID: " + response.messageId());
+	            } else {
+	                throw new RuntimeException("SQS send failed: " + response.sdkHttpResponse().statusCode());
+	            }
+
+	        } catch (Exception e) {
+	            throw new RuntimeException("Failed to send message to SQS: " + e.getMessage(), e);
+	        }
+	    }
 
 }

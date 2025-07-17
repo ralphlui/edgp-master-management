@@ -20,4 +20,6 @@ public interface IMasterdataService {
 	List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq);
 
 	List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq);
+	
+	int processAndSendRawDataToSqs(String fileName,String authorizationHeader);
 }

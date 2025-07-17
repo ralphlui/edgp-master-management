@@ -9,13 +9,13 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 public class CSVUploadHeader {
 
 	private final String id;
-    private final String filename;
+    private final String fileName;
     private final String uploadedBy;
     private final String uploadDate;
 
-    public CSVUploadHeader(String id, String filename, String uploadedBy) {
+    public CSVUploadHeader(String id, String fileName, String uploadedBy) {
         this.id = id;
-        this.filename = filename;
+        this.fileName = fileName;
         this.uploadedBy = uploadedBy;
         this.uploadDate = LocalDateTime.now().toString();
     }
@@ -23,7 +23,7 @@ public class CSVUploadHeader {
     public Map<String, AttributeValue> toItem() {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put("id", AttributeValue.builder().s(id).build());
-        item.put("filename", AttributeValue.builder().s(filename).build());
+        item.put("fileName", AttributeValue.builder().s(fileName).build());
         item.put("uploadedBy", AttributeValue.builder().s(uploadedBy).build());
         item.put("uploadDate", AttributeValue.builder().s(uploadDate).build());
         return item;
