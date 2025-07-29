@@ -64,7 +64,7 @@ public class MasterdataService implements IMasterdataService {
 			if (!dynamoService.tableExists(headerTableName)) {
 				dynamoService.createTable(headerTableName);
 			}
-			headerService.saveHeader(headerTableName, headerId, fileName, uploadedBy);
+			headerService.saveHeader(headerTableName, headerId, fileName, uploadedBy, rows.size());
 
 			String stagingTableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
 			if (!dynamoService.tableExists(stagingTableName)) {
@@ -191,7 +191,7 @@ public class MasterdataService implements IMasterdataService {
 		return mapItems(response.items());
 	}
 
-	@Override
+     @Override
 	public int processAndSendRawDataToSqs(String fileName, String authorizationHeader) {
 		String headerTable = DynamoConstants.UPLOAD_HEADER_TABLE_NAME;
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
@@ -203,7 +203,8 @@ public class MasterdataService implements IMasterdataService {
 			String uploadedBy = jwtService.extractSubject(jwtToken);
 			
 			// Step 1: Get fileId from header
-			String fileId = headerService.getFileIdByFileName(headerTable, fileName);
+			List<Map<String, AttributeValue>> files = headerService.getFileByFileName(headerTable, fileName);
+			String fileId = files.get(0).get("id").s();
 
 			// Step 2: Get unprocessed rows from staging table
 			List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
@@ -218,9 +219,10 @@ public class MasterdataService implements IMasterdataService {
 
 					String createdDate = LocalDateTime.now().format(formatter);
 					validatedRow.put("createdDate", createdDate);
-					validatedRow.put("status", "");
+					//validatedRow.put("status", "");
 					validatedRow.put("ruleStatus", "");
 					validatedRow.put("aiStatus", "");
+					validatedRow.put("totalRowsCount", files.get(0).get("totalRowsCount").n());
 					validatedRow.remove("isprocessed");
 					validatedRow.remove("uploadedBy");
 					validatedRow.remove("uploadedDate");

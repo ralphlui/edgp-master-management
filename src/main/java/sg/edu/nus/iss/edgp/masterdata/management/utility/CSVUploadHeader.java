@@ -12,12 +12,14 @@ public class CSVUploadHeader {
     private final String fileName;
     private final String uploadedBy;
     private final String uploadDate;
+    private final int totalRows;
 
-    public CSVUploadHeader(String id, String fileName, String uploadedBy) {
+    public CSVUploadHeader(String id, String fileName, String uploadedBy, int totalRows) {
         this.id = id;
         this.fileName = fileName;
         this.uploadedBy = uploadedBy;
         this.uploadDate = LocalDateTime.now().toString();
+        this.totalRows = totalRows;
     }
 
     public Map<String, AttributeValue> toItem() {
@@ -26,6 +28,7 @@ public class CSVUploadHeader {
         item.put("fileName", AttributeValue.builder().s(fileName).build());
         item.put("uploadedBy", AttributeValue.builder().s(uploadedBy).build());
         item.put("uploadDate", AttributeValue.builder().s(uploadDate).build());
+        item.put("totalRowsCount", AttributeValue.builder().n(String.valueOf(totalRows)).build());
         return item;
     }
 }
