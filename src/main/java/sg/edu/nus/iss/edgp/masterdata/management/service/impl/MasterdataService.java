@@ -219,9 +219,10 @@ public class MasterdataService implements IMasterdataService {
 
 					String createdDate = LocalDateTime.now().format(formatter);
 					validatedRow.put("createdDate", createdDate);
-					//validatedRow.put("status", "");
+					validatedRow.put("status", "");
 					validatedRow.put("ruleStatus", "");
 					validatedRow.put("aiStatus", "");
+					validatedRow.put("message", "");
 					validatedRow.put("totalRowsCount", files.get(0).get("totalRowsCount").n());
 					validatedRow.remove("isprocessed");
 					validatedRow.remove("uploadedBy");
