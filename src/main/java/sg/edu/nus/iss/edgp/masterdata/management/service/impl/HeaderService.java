@@ -21,8 +21,8 @@ public class HeaderService implements IHeaderService{
     private final DynamoDbClient dynamoDbClient;
 
     @Override
-    public void saveHeader(String tableName,String id, String filename, String uploadedBy) {
-        CSVUploadHeader header = new CSVUploadHeader(id, filename, uploadedBy);
+    public void saveHeader(String tableName,String id, String filename, String uploadedBy, int totalRows) {
+        CSVUploadHeader header = new CSVUploadHeader(id, filename, uploadedBy, totalRows);
 
         PutItemRequest request = PutItemRequest.builder()
                 .tableName(tableName)
@@ -33,7 +33,7 @@ public class HeaderService implements IHeaderService{
     }
     
     @Override
-    public String getFileIdByFileName(String headerTableName, String fileName) {
+    public List<Map<String, AttributeValue>> getFileByFileName(String headerTableName, String fileName) {
         Map<String, AttributeValue> expressionValues = new HashMap<>();
         expressionValues.put(":fileName", AttributeValue.builder().s(fileName).build());
 
@@ -49,7 +49,7 @@ public class HeaderService implements IHeaderService{
             throw new RuntimeException("fileName not found in header table: " + fileName);
         }
 
-        return results.get(0).get("id").s();
+        return results;
     }
 
 }
