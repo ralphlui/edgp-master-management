@@ -9,18 +9,21 @@ import org.springframework.stereotype.Component;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.AdminAPICall;
+import sg.edu.nus.iss.edgp.masterdata.management.api.connector.WorkflowAPICall;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.User;
 
 @Component
 @RequiredArgsConstructor
 public class JSONReader {
 	
-	private final AdminAPICall apiCall;
+	private final AdminAPICall adminAPICall;
+	private final WorkflowAPICall workflowAPICall;
+	
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
 
 	public JSONObject getActiveUserInfo(String userId, String authorizationHeader) {
         JSONObject jsonResponse = new JSONObject();
-		String responseStr = apiCall.validateActiveUser(userId, authorizationHeader);
+		String responseStr = adminAPICall.validateActiveUser(userId, authorizationHeader);
 		try {
 			JSONParser parser = new JSONParser();
 			jsonResponse = (JSONObject) parser.parse(responseStr);
@@ -64,5 +67,19 @@ public class JSONReader {
 			return (JSONObject) jsonResponse.get("data");
 		}
 		return null;
+	}
+	
+	public JSONObject getLatestFileStatusInfo() {
+        JSONObject jsonResponse = new JSONObject();
+		String responseStr = workflowAPICall.getLatestFileProcessStatus();
+		try {
+			JSONParser parser = new JSONParser();
+			jsonResponse = (JSONObject) parser.parse(responseStr);
+			return jsonResponse;
+		} catch (ParseException e) {	
+			logger.error("Error parsing JSON response for getLatestFileStatusInfo...", e);
+
+		}
+		return jsonResponse;
 	}
 }
