@@ -37,7 +37,7 @@ public class MasterdataController {
 
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataController.class);
 	private static final String INVALID_USER_ID = AuditLogInvalidUser.INVALID_USER_ID.toString();
-	private static final String API_ENDPOINT = "/api/mdm";
+	private static final String API_ENDPOINT = "/api/mdm/data";
 	private static final String UNEXPECTED_ERROR = "An unexpected error occurred. Please contact support.";
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 

@@ -27,7 +27,7 @@ public class PayloadBuilderService {
         ObjectNode entry = root.putObject("data_entry");
 
         entry.put("data_type", meta.getDataType());
-        entry.put("domainName", meta.getDomainName());
+        entry.put("domain_name", meta.getDomainName());
         entry.put("file_id", meta.getFileId());
         entry.put("policy_id", meta.getPolicyId());
 
@@ -47,7 +47,9 @@ public class PayloadBuilderService {
             }
             rn.put("rule_description", r.getRule_description());
         }
+        String s =mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        System.out.println(s);
 
-        return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        return s;
     }
 }

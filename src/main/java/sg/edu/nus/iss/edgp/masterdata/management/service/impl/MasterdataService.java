@@ -19,6 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.nimbusds.jose.shaded.gson.stream.JsonReader;
 
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.RuleItems;
@@ -53,7 +54,7 @@ public class MasterdataService implements IMasterdataService {
 	private final HeaderService headerService;
 	private final SQSPublishingService sqsPublishingService;
 	private final JSONReader jsonReader;
-	PayloadBuilderService builderService;
+	private final PayloadBuilderService builderService;
 
 	@Override
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
@@ -68,14 +69,23 @@ public class MasterdataService implements IMasterdataService {
 
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractSubject(jwtToken);
+			
 			String fileName = file.getOriginalFilename();
 			String headerId = UUID.randomUUID().toString();
+			MasterDataHeader header = new MasterDataHeader();
+			header.setFileName(fileName);
+			header.setDomainName(masterReq.getDomainName().trim());
+			header.setOrganizationId(masterReq.getOrganizationId().trim());
+			header.setPolicyId(masterReq.getPolicyId().trim());
+			header.setUploadedBy(uploadedBy);
+			header.setTotalRowsCount(rows.size());
+			
 
-			String headerTableName = DynamoConstants.UPLOAD_HEADER_TABLE_NAME;
+			String headerTableName = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME;
 			if (!dynamoService.tableExists(headerTableName)) {
 				dynamoService.createTable(headerTableName);
 			}
-			headerService.saveHeader(headerTableName, headerId, fileName, uploadedBy, rows.size());
+			headerService.saveHeader(headerTableName, header);
 
 			String stagingTableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
 			if (!dynamoService.tableExists(stagingTableName)) {
@@ -87,12 +97,13 @@ public class MasterdataService implements IMasterdataService {
 			for (Map<String, String> row : rows) {
 				String uploadedDate = LocalDateTime.now().format(formatter);
 				row.put("id", UUID.randomUUID().toString());
-				row.put("organization_id", masterReq.getOrganizationId());
-				row.put("policy_id", masterReq.getPolicyId());
-				row.put("fileId", headerId);
-				row.put("uploadedBy", uploadedBy);
-				row.put("uploadedDate", uploadedDate);
-				row.put("isprocessed", "0");
+				row.put("organization_id", masterReq.getOrganizationId().trim());
+				row.put("policy_id", masterReq.getPolicyId().trim());
+				row.put("domain_name", masterReq.getDomainName().trim());
+				row.put("file_id", headerId);
+				row.put("uploaded_by", uploadedBy);
+				row.put("uploaded_date", uploadedDate);
+				row.put("is_processed", "0");
 
 				dynamoService.insertStagingMasterData(stagingTableName, row);
 				allInsertedRows.add(new HashMap<>(row));
@@ -204,7 +215,7 @@ public class MasterdataService implements IMasterdataService {
 
      @Override
 	public int processAndSendRawDataToSqs(String fileName, String authorizationHeader) {
-		String headerTable = DynamoConstants.UPLOAD_HEADER_TABLE_NAME.trim();
+		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
 		String masterDataTaskTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
 		try {
@@ -233,14 +244,18 @@ public class MasterdataService implements IMasterdataService {
 					String stgID = validatedRow.get("id");
 					validatedRow.remove("id");
 					validatedRow.put("id", UUID.randomUUID().toString());
-					validatedRow.put("createdDate", createdDate);
-					validatedRow.put("finalStatus", "");
-					validatedRow.put("ruleStatus", "");
+					validatedRow.put("created_date", createdDate);
+					validatedRow.put("final_status", "");
+					validatedRow.put("rule_status", "");
 					validatedRow.put("message", "");
-					validatedRow.put("totalRowsCount", files.get(0).get("totalRowsCount").n());
-					validatedRow.remove("isprocessed");
-					validatedRow.remove("uploadedBy");
-					validatedRow.remove("uploadedDate");
+					validatedRow.remove("is_processed");
+					validatedRow.remove("uploaded_by");
+					validatedRow.remove("uploaded_date");
+					validatedRow.remove("created_date");
+					validatedRow.remove("organization_id");
+					validatedRow.remove("file_id");
+					validatedRow.remove("policy_id");
+					validatedRow.remove("totalRowsCount");
 
 					// 1. Insert into validated table
 					if (!dynamoService.tableExists(masterDataTaskTable)) {
@@ -273,7 +288,7 @@ public class MasterdataService implements IMasterdataService {
      private String prepareJsonMessage(Map<String, String> validatedRow,String fileID,String authorizationHeader) {
     	 String jsonMessage="";
 	     try {
-    	 PolicyRoot policyRoot= jsonReader.getValidationRules(validatedRow.get("policyId"), authorizationHeader);
+    	 PolicyRoot policyRoot= jsonReader.getValidationRules(validatedRow.get("policy_id"), authorizationHeader);
     	 
     	 if(policyRoot !=null) {
     		 if(policyRoot.getSuccess() && policyRoot.getTotalRecord()>0) {
@@ -293,7 +308,7 @@ public class MasterdataService implements IMasterdataService {
     				 rules.add(rule);
     				 }
     				 
-    				 builderService.build(metadata,validatedRow, rules);
+    				 jsonMessage= builderService.build(metadata,validatedRow, rules);
     		 }
     	 
     	 }

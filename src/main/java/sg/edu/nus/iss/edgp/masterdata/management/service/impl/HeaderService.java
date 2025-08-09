@@ -7,6 +7,7 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IHeaderService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVUploadHeader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -21,12 +22,12 @@ public class HeaderService implements IHeaderService{
     private final DynamoDbClient dynamoDbClient;
 
     @Override
-    public void saveHeader(String tableName,String id, String filename, String uploadedBy, int totalRows) {
-        CSVUploadHeader header = new CSVUploadHeader(id, filename, uploadedBy, totalRows);
+    public void saveHeader(String tableName,MasterDataHeader header) {
+        CSVUploadHeader csvUpHeader = new CSVUploadHeader(header);
 
         PutItemRequest request = PutItemRequest.builder()
                 .tableName(tableName)
-                .item(header.toItem())
+                .item(csvUpHeader.toItem())
                 .build();
 
         dynamoDbClient.putItem(request);
@@ -35,11 +36,11 @@ public class HeaderService implements IHeaderService{
     @Override
     public List<Map<String, AttributeValue>> getFileByFileName(String headerTableName, String fileName) {
         Map<String, AttributeValue> expressionValues = new HashMap<>();
-        expressionValues.put(":fileName", AttributeValue.builder().s(fileName).build());
+        expressionValues.put(":file_name", AttributeValue.builder().s(fileName).build());
 
         ScanRequest scanRequest = ScanRequest.builder()
             .tableName(headerTableName)
-            .filterExpression("fileName = :fileName")
+            .filterExpression("file_name = :file_name")
             .expressionAttributeValues(expressionValues)
             .build();
 

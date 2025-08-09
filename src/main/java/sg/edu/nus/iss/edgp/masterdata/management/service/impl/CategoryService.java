@@ -30,9 +30,9 @@ public class CategoryService implements ICategoryService {
 		List<String> retList = new ArrayList<>();
 
 		try {
-			if (dynamoService.tableExists(DynamoConstants.CATEGORY_TABLE_NAME.trim())) {
+			if (dynamoService.tableExists(DynamoConstants.DOMAIN_TABLE_NAME.trim())) {
 
-				ScanRequest scanRequest = ScanRequest.builder().tableName(DynamoConstants.CATEGORY_TABLE_NAME.trim())
+				ScanRequest scanRequest = ScanRequest.builder().tableName(DynamoConstants.DOMAIN_TABLE_NAME.trim())
 						.attributesToGet("name").build();
 
 				ScanResponse response = dynamoDbClient.scan(scanRequest);

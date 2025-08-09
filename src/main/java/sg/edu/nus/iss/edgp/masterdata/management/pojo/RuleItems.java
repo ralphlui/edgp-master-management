@@ -1,5 +1,7 @@
 package sg.edu.nus.iss.edgp.masterdata.management.pojo;
 
+import java.util.Map;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
@@ -24,7 +26,6 @@ public class RuleItems {
 	private String description;
 	
 	@JsonProperty("parameters")
-	private String parameters;
-
+    private Map<String, Object> parameters;
 
 }

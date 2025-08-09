@@ -163,13 +163,13 @@ public class DynamicDetailService implements IDynamicDetailService {
 	@Override
 	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId, String uploadedBy) {
 	    Map<String, AttributeValue> expressionValues = new HashMap<>();
-	    expressionValues.put(":fileId", AttributeValue.builder().s(fileId).build());
-	    expressionValues.put(":uploadedBy", AttributeValue.builder().s(uploadedBy).build());
-	    expressionValues.put(":isprocessed", AttributeValue.builder().n("0").build());
+	    expressionValues.put(":file_id", AttributeValue.builder().s(fileId).build());
+	    expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy).build());
+	    expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
 
 	    ScanRequest scanRequest = ScanRequest.builder()
 	        .tableName(tableName)
-	        .filterExpression("fileId = :fileId  AND uploadedBy = :uploadedBy AND isprocessed = :isprocessed")
+	        .filterExpression("file_id = :file_id  AND uploaded_by = :uploaded_by AND is_processed = :is_processed")
 	        .expressionAttributeValues(expressionValues)
 	        .build();
 
@@ -189,7 +189,7 @@ public class DynamicDetailService implements IDynamicDetailService {
 	    key.put("id", AttributeValue.builder().s(id).build());
 
 	    Map<String, AttributeValueUpdate> updates = new HashMap<>();
-	    updates.put("isprocessed", AttributeValueUpdate.builder()
+	    updates.put("is_processed", AttributeValueUpdate.builder()
 	        .value(AttributeValue.builder().s(newStatus).build())
 	        .action(AttributeAction.PUT)
 	        .build());
