@@ -92,13 +92,12 @@ public class SQSPublishingService {
 	}
 	
 	
-	 public void sendRecordToQueue(Map<String, String> messagePayload) {
+	 public void sendRecordToQueue(String messagePayload) {
 	        try {
-	            String jsonPayload = new ObjectMapper().writeValueAsString(messagePayload);
-
+	             
 	            SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
 	                    .queueUrl(workflowIngestionQueueURL)
-	                    .messageBody(jsonPayload)
+	                    .messageBody(messagePayload)
 	                    .build();
 
 	            SendMessageResponse response = sqsClient.sendMessage(sendMsgRequest);

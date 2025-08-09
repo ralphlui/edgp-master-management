@@ -7,34 +7,40 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.databind.json.JsonMapper;
+
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.AdminAPICall;
+import sg.edu.nus.iss.edgp.masterdata.management.api.connector.PolicyAPICall;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.WorkflowAPICall;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.User;
 
 @Component
 @RequiredArgsConstructor
 public class JSONReader {
-	
+
 	private final AdminAPICall adminAPICall;
 	private final WorkflowAPICall workflowAPICall;
-	
+	private final PolicyAPICall policyAPICall;
+
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
 
 	public JSONObject getActiveUserInfo(String userId, String authorizationHeader) {
-        JSONObject jsonResponse = new JSONObject();
+		JSONObject jsonResponse = new JSONObject();
 		String responseStr = adminAPICall.validateActiveUser(userId, authorizationHeader);
 		try {
 			JSONParser parser = new JSONParser();
 			jsonResponse = (JSONObject) parser.parse(responseStr);
 			return jsonResponse;
-		} catch (ParseException e) {	
+		} catch (ParseException e) {
 			logger.error("Error parsing JSON response for getActiveUserDetails...", e);
 
 		}
 		return jsonResponse;
 	}
-	
+
 	public String getMessageFromResponse(JSONObject jsonResponse) {
 		return (String) jsonResponse.get("message");
 	}
@@ -42,7 +48,7 @@ public class JSONReader {
 	public Boolean getSuccessFromResponse(JSONObject jsonResponse) {
 		return (Boolean) jsonResponse.get("success");
 	}
-	
+
 	public User getUserObject(JSONObject userJSONObject) {
 		User var = new User();
 		JSONObject data = getDataFromResponse(userJSONObject);
@@ -60,7 +66,6 @@ public class JSONReader {
 
 		return var;
 	}
-	
 
 	public JSONObject getDataFromResponse(JSONObject jsonResponse) {
 		if (jsonResponse != null && !jsonResponse.isEmpty()) {
@@ -68,18 +73,32 @@ public class JSONReader {
 		}
 		return null;
 	}
-	
+
 	public JSONObject getLatestFileStatusInfo() {
-        JSONObject jsonResponse = new JSONObject();
+		JSONObject jsonResponse = new JSONObject();
 		String responseStr = workflowAPICall.getLatestFileProcessStatus();
 		try {
 			JSONParser parser = new JSONParser();
 			jsonResponse = (JSONObject) parser.parse(responseStr);
 			return jsonResponse;
-		} catch (ParseException e) {	
+		} catch (ParseException e) {
 			logger.error("Error parsing JSON response for getLatestFileStatusInfo...", e);
 
 		}
 		return jsonResponse;
+	}
+
+	public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
+		JsonDataMapper mapper = new JsonDataMapper();
+		String responseStr = policyAPICall.getRuleByPolicyId(policyId, authorizationHeader);
+		try {
+			if (responseStr != null && !responseStr.isEmpty()) {
+				return mapper.getPolicyAndRules(responseStr);
+			}
+		} catch (Exception e) {
+			logger.error("Error parsing JSON response for getValidationRules...", e);
+
+		}
+		return null;
 	}
 }

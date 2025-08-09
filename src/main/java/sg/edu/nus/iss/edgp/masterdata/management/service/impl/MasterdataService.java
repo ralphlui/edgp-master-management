@@ -16,9 +16,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.nimbusds.jose.shaded.gson.stream.JsonReader;
+
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.RuleItems;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.Metadata;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.ValidationRule;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
@@ -26,6 +33,8 @@ import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.JsonDataMapper;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -43,6 +52,8 @@ public class MasterdataService implements IMasterdataService {
 	private final DynamicDetailService dynamoService;
 	private final HeaderService headerService;
 	private final SQSPublishingService sqsPublishingService;
+	private final JSONReader jsonReader;
+	PayloadBuilderService builderService;
 
 	@Override
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
@@ -193,14 +204,15 @@ public class MasterdataService implements IMasterdataService {
 
      @Override
 	public int processAndSendRawDataToSqs(String fileName, String authorizationHeader) {
-		String headerTable = DynamoConstants.UPLOAD_HEADER_TABLE_NAME;
-		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		String masterDataTable = DynamoConstants.MASTER_DATA_TABLE_NAME;
+		String headerTable = DynamoConstants.UPLOAD_HEADER_TABLE_NAME.trim();
+		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
+		String masterDataTaskTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
 		try {
 			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractSubject(jwtToken);
+		
 			
 			// Step 1: Get fileId from header
 			List<Map<String, AttributeValue>> files = headerService.getFileByFileName(headerTable, fileName);
@@ -218,10 +230,12 @@ public class MasterdataService implements IMasterdataService {
 							Collectors.toMap(Map.Entry::getKey, e -> e.getValue().s() != null ? e.getValue().s() : ""));
 
 					String createdDate = LocalDateTime.now().format(formatter);
+					String stgID = validatedRow.get("id");
+					validatedRow.remove("id");
+					validatedRow.put("id", UUID.randomUUID().toString());
 					validatedRow.put("createdDate", createdDate);
-					validatedRow.put("status", "");
+					validatedRow.put("finalStatus", "");
 					validatedRow.put("ruleStatus", "");
-					validatedRow.put("aiStatus", "");
 					validatedRow.put("message", "");
 					validatedRow.put("totalRowsCount", files.get(0).get("totalRowsCount").n());
 					validatedRow.remove("isprocessed");
@@ -229,18 +243,18 @@ public class MasterdataService implements IMasterdataService {
 					validatedRow.remove("uploadedDate");
 
 					// 1. Insert into validated table
-					if (!dynamoService.tableExists(masterDataTable)) {
-						dynamoService.createTable(masterDataTable);
+					if (!dynamoService.tableExists(masterDataTaskTable)) {
+						dynamoService.createTable(masterDataTaskTable);
 					}
-					dynamoService.insertValidatedMasterData(masterDataTable, validatedRow);
+					dynamoService.insertValidatedMasterData(masterDataTaskTable, validatedRow);
 
 					// 2. Send to SQS
-					validatedRow.remove("createdDate");
-					sqsPublishingService.sendRecordToQueue(validatedRow);
+					//prepare JSON format
+					String sqsMessage= prepareJsonMessage(validatedRow,fileId,authorizationHeader);
+					sqsPublishingService.sendRecordToQueue(sqsMessage);
 
 					// 3. Update isprocessed
-					String rowId = validatedRow.get("id");
-					dynamoService.updateStagingProcessedStatus(stagingTable, rowId, "1");
+					dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
 
 					processedCount++;
 				} catch (Exception e) {
@@ -255,5 +269,40 @@ public class MasterdataService implements IMasterdataService {
 			throw new MasterdataServiceException("Process and send data to SQS failed: " + e.getMessage());
 		}
 	}
+     
+     private String prepareJsonMessage(Map<String, String> validatedRow,String fileID,String authorizationHeader) {
+    	 String jsonMessage="";
+	     try {
+    	 PolicyRoot policyRoot= jsonReader.getValidationRules(validatedRow.get("policyId"), authorizationHeader);
+    	 
+    	 if(policyRoot !=null) {
+    		 if(policyRoot.getSuccess() && policyRoot.getTotalRecord()>0) {
+    			 List<ValidationRule> rules = new ArrayList<ValidationRule>();
+    				 Metadata metadata = new Metadata();
+    		    	 metadata.setDomainName(policyRoot.getData().getDomainName());
+    		    	 metadata.setFileId(fileID);
+    				 metadata.setPolicyId(policyRoot.getData().getPolicyId());
+    				
+    				 //Validation Rules
+    				 for(RuleItems ruleItem : policyRoot.getData().getRules()) {
+    				 ValidationRule rule = new ValidationRule();
+    				 rule.setRule_name(ruleItem.getRuleName());
+    				 rule.setColumn_name(ruleItem.getAppliesToField());
+    				 rule.setRule_description(ruleItem.getDescription());
+    				 rule.setValue(ruleItem.getParameters());
+    				 rules.add(rule);
+    				 }
+    				 
+    				 builderService.build(metadata,validatedRow, rules);
+    		 }
+    	 
+    	 }
+    	 
+	     } catch (Exception e) {
+				logger.error("prepareJsonMessage exception: {}", e.toString());
+				throw new MasterdataServiceException("PrepareJsonMessage failed: " + e.getMessage());
+			} 
+	     return jsonMessage;
+     }
 
 }

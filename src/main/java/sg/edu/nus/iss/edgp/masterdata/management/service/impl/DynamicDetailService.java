@@ -19,6 +19,9 @@ import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableRequest;
 import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
+import software.amazon.awssdk.services.dynamodb.model.DynamoDbException;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
@@ -199,6 +202,21 @@ public class DynamicDetailService implements IDynamicDetailService {
 
 	    dynamoDbClient.updateItem(updateRequest);
 	}
+    
+    public Map<String, AttributeValue> getDomainNameByFileID(String tableName, String id) {
+        try {
+            GetItemRequest getItemRequest = GetItemRequest.builder()
+                    .tableName(tableName)
+                    .key(Map.of("id", AttributeValue.builder().s(id).build())) // "id" is the partition key
+                    .build();
+
+            GetItemResponse response = dynamoDbClient.getItem(getItemRequest);
+            return response.item();
+        } catch (DynamoDbException e) {
+            System.err.println("Error retrieving item: " + e.getMessage());
+            return null;
+        }
+    }
 
 
 }
