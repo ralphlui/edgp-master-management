@@ -17,34 +17,34 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.*;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.*;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DomainService;
 
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/mdm/tables")
 @Validated
-public class CategoryController {
+public class DomainController {
 
 	
 	@Value("${audit.activity.type.prefix}")
 	String activityTypePrefix;
 	
-	private static final Logger logger = LoggerFactory.getLogger(CategoryController.class);	 
+	private static final Logger logger = LoggerFactory.getLogger(DomainController.class);	 
 	private static final String INVALID_USER_ID = AuditLogInvalidUser.INVALID_USER_ID.toString();	
 	private static final String API_ENDPOINT = "/api/mdm/tables";
 	private static final String UNEXPECTED_ERROR = "An unexpected error occurred. Please contact support.";
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 	 
 	private final AuditService auditService;
-	private final CategoryService categoryService;
+	private final DomainService domainService;
 
 	
-	@GetMapping(value = "/category", produces = "application/json")
+	@GetMapping(value = "/domains", produces = "application/json")
 	@PreAuthorize("hasAuthority('SCOPE_view:mdm') or hasAuthority('SCOPE_manage:mdm')")
-	public ResponseEntity<APIResponse<List<String>>> getAllCategory(
+	public ResponseEntity<APIResponse<List<String>>> getDomains(
 			@RequestHeader("Authorization") String authorizationHeader) {
 
-		final String activityType = "GetCategoryList";
+		final String activityType = "GetDomainList";
 
 		final HTTPVerb httpMethod = HTTPVerb.GET;
 		String message = "";
@@ -52,10 +52,10 @@ public class CategoryController {
 
 		try {
 			
-			List<String> categories = categoryService.findCategories();
+			List<String> categories = domainService.findDomains();
 
 			if (!categories.isEmpty()) {
-				message = "Successfully retrieved all category.";
+				message = "Successfully retrieved all domain.";
 				auditService.logAudit(auditDTO, 200, message, authorizationHeader);
 				return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(categories, message,categories.size()));
 				

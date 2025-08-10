@@ -96,8 +96,8 @@ public class MasterdataController {
 			int processedCount = masterdataService.processAndSendRawDataToSqs(fileName,authorizationHeader);
 			if (processedCount< 1) {
 				message = "No data to process.";
-				auditService.logAudit(auditDTO, 404, message, authorizationHeader);
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.error(message));
+				auditService.logAudit(auditDTO, 200, message, authorizationHeader);
+				return ResponseEntity.status(HttpStatus.OK).body(APIResponse.error(message));
 				 
 			}
 			message ="Processed and sent " + processedCount + " rows to SQS.";

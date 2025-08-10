@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
-import sg.edu.nus.iss.edgp.masterdata.management.service.ICategoryService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.IDomainService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -19,14 +19,14 @@ import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
 @RequiredArgsConstructor
 @Service
-public class CategoryService implements ICategoryService {
+public class DomainService implements IDomainService {
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
 	private final DynamoDbClient dynamoDbClient;
 	private final DynamicDetailService dynamoService;
 
 	@Override
-	public List<String> findCategories() {
+	public List<String> findDomains() {
 		List<String> retList = new ArrayList<>();
 
 		try {
@@ -39,7 +39,7 @@ public class CategoryService implements ICategoryService {
 
 				List<Map<String, AttributeValue>> items = response.items();
 
-				logger.info("Total record in findCategories: {}", items.size());
+				logger.info("Total record in findDomains: {}", items.size());
 
 				for (Map<String, AttributeValue> item : items) {
 					if (item.containsKey("name") && item.get("name").s() != null) {
@@ -51,8 +51,8 @@ public class CategoryService implements ICategoryService {
 			return retList;
 
 		} catch (Exception e) {
-			logger.error("findCategories exception: {}", e.toString());
-			throw new MasterdataServiceException("An error occurred while fetching categories", e);
+			logger.error("findDomains exception: {}", e.toString());
+			throw new MasterdataServiceException("An error occurred while fetching domains", e);
 		}
 	}
 

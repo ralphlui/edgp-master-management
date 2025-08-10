@@ -52,7 +52,7 @@ public class DynamicDetailService implements IDynamicDetailService {
 	    }
 
 	    for (Map.Entry<String, String> entry : rawData.entrySet()) {
-	        String column = entry.getKey();
+	        String column = entry.getKey().toLowerCase().trim();
 	        String value = entry.getValue();
 	        
 	        if (column == null || column.trim().isEmpty()) continue;
@@ -143,33 +143,30 @@ public class DynamicDetailService implements IDynamicDetailService {
 	}
 	
 	@Override
-	public void insertValidatedMasterData(String tableName, Map<String, String> rowData) {
-	    Map<String, AttributeValue> item = rowData.entrySet().stream()
-	        .collect(Collectors.toMap(
-	            Map.Entry::getKey,
-	            e -> AttributeValue.builder().s(e.getValue()).build()
-	        ));
+	public void insertValidatedMasterData(String tableName, Map<String, AttributeValue> rowData) {
+	    if (rowData == null || rowData.isEmpty()) return;
 
 	    PutItemRequest request = PutItemRequest.builder()
 	        .tableName(tableName)
-	        .item(item)
+	        .item(rowData) 
 	        .build();
 
 	    dynamoDbClient.putItem(request);
 	}
 
 	
-	
 	@Override
-	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId, String uploadedBy) {
+	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName,
+			String fileId,String policyId,String domainName) {
 	    Map<String, AttributeValue> expressionValues = new HashMap<>();
 	    expressionValues.put(":file_id", AttributeValue.builder().s(fileId).build());
-	    expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy).build());
+	    expressionValues.put(":domain_name", AttributeValue.builder().s(domainName).build());
+	    expressionValues.put(":policy_id", AttributeValue.builder().s(policyId).build());
 	    expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
 
 	    ScanRequest scanRequest = ScanRequest.builder()
 	        .tableName(tableName)
-	        .filterExpression("file_id = :file_id  AND uploaded_by = :uploaded_by AND is_processed = :is_processed")
+	        .filterExpression("file_id = :file_id  AND domain_name = :domain_name AND policy_id = :policy_id AND is_processed = :is_processed")
 	        .expressionAttributeValues(expressionValues)
 	        .build();
 

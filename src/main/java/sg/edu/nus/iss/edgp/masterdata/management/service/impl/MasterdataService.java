@@ -1,32 +1,24 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.nimbusds.jose.shaded.gson.stream.JsonReader;
-
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.RuleItems;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
-import sg.edu.nus.iss.edgp.masterdata.management.dto.Metadata;
-import sg.edu.nus.iss.edgp.masterdata.management.dto.ValidationRule;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
@@ -35,7 +27,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.JsonDataMapper;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -53,33 +44,32 @@ public class MasterdataService implements IMasterdataService {
 	private final DynamicDetailService dynamoService;
 	private final HeaderService headerService;
 	private final SQSPublishingService sqsPublishingService;
-	private final JSONReader jsonReader;
-	private final PayloadBuilderService builderService;
+	private final JSONWriterService stagingWriterService;
 
 	@Override
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
 
-		List<Map<String, Object>> allInsertedRows = new ArrayList<>();
-
 		try {
 			List<Map<String, String>> rows = csvParser.parseCsv(file);
+
 			if (rows.isEmpty()) {
 				return new UploadResult("CSV is empty.", 0, Collections.emptyList());
 			}
 
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractSubject(jwtToken);
-			
+
 			String fileName = file.getOriginalFilename();
 			String headerId = UUID.randomUUID().toString();
 			MasterDataHeader header = new MasterDataHeader();
 			header.setFileName(fileName);
+			header.setId(headerId);
 			header.setDomainName(masterReq.getDomainName().trim());
 			header.setOrganizationId(masterReq.getOrganizationId().trim());
 			header.setPolicyId(masterReq.getPolicyId().trim());
 			header.setUploadedBy(uploadedBy);
 			header.setTotalRowsCount(rows.size());
-			
+			header.setIsProcessed(0);
 
 			String headerTableName = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME;
 			if (!dynamoService.tableExists(headerTableName)) {
@@ -92,28 +82,16 @@ public class MasterdataService implements IMasterdataService {
 				dynamoService.createTable(stagingTableName);
 			}
 
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+			InsertionSummary summary = stagingWriterService.writeToStaging(stagingTableName, rows,
+					masterReq.getOrganizationId(), masterReq.getPolicyId(), masterReq.getDomainName(), headerId,
+					uploadedBy);
 
-			for (Map<String, String> row : rows) {
-				String uploadedDate = LocalDateTime.now().format(formatter);
-				row.put("id", UUID.randomUUID().toString());
-				row.put("organization_id", masterReq.getOrganizationId().trim());
-				row.put("policy_id", masterReq.getPolicyId().trim());
-				row.put("domain_name", masterReq.getDomainName().trim());
-				row.put("file_id", headerId);
-				row.put("uploaded_by", uploadedBy);
-				row.put("uploaded_date", uploadedDate);
-				row.put("is_processed", "0");
+			// Reply to FE with top 50 preview and the total count
+			int total = summary.totalInserted();
+			List<Map<String, Object>> top50 = summary.previewTop50();
 
-				dynamoService.insertStagingMasterData(stagingTableName, row);
-				allInsertedRows.add(new HashMap<>(row));
-			}
-
-			// Slice to top 50 for display
-			List<Map<String, Object>> top50 = allInsertedRows.stream().limit(50).collect(Collectors.toList());
-
-			String message = "Inserted " + allInsertedRows.size() + " rows successfully.";
-			return new UploadResult(message, allInsertedRows.size(), top50);
+			String message = "Inserted " + total + " rows successfully.";
+			return new UploadResult(message, total, top50);
 
 		} catch (Exception e) {
 			logger.error("uploadCsvDataToTable exception: {}", e.toString());
@@ -213,111 +191,140 @@ public class MasterdataService implements IMasterdataService {
 		return mapItems(response.items());
 	}
 
-     @Override
+	@Override
 	public int processAndSendRawDataToSqs(String fileName, String authorizationHeader) {
 		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
 		String masterDataTaskTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
-		try {
-			DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+		try {
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractSubject(jwtToken);
-		
-			
-			// Step 1: Get fileId from header
-			List<Map<String, AttributeValue>> files = headerService.getFileByFileName(headerTable, fileName);
-			String fileId = files.get(0).get("id").s();
 
-			// Step 2: Get unprocessed rows from staging table
-			List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
-					fileId, uploadedBy);
+			// 1) Header lookup
+			List<Map<String, AttributeValue>> files = headerService.getFileByFileName(headerTable, fileName);
+			if (files == null ) {
+				throw new MasterdataServiceException("Header not found for file: " + fileName);
+			}
+			if(!files.isEmpty()) {
+				
 			
+			String fileId = files.get(0).get("id").s();
+			String policyId = files.get(0).get("policy_id").s();
+			String domainName = files.get(0).get("domain_name").s();
+
+			if (fileId == null || fileId.isEmpty() || policyId == null || policyId.isEmpty() || domainName == null
+					|| domainName.isEmpty()) {
+				throw new MasterdataServiceException("Missing header info (fileId/policyId/domainName).");
+			}
+
+			// 2) Unprocessed staging
+			List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
+					fileId, policyId, domainName);
+
+			if (!dynamoService.tableExists(masterDataTaskTable)) {
+				dynamoService.createTable(masterDataTaskTable);
+			}
+
 			int processedCount = 0;
+			String createdDateIso = java.time.LocalDateTime.now().toString();
 
 			for (Map<String, AttributeValue> record : records) {
 				try {
-					Map<String, String> validatedRow = record.entrySet().stream().collect(
-							Collectors.toMap(Map.Entry::getKey, e -> e.getValue().s() != null ? e.getValue().s() : ""));
 
-					String createdDate = LocalDateTime.now().format(formatter);
-					String stgID = validatedRow.get("id");
-					validatedRow.remove("id");
-					validatedRow.put("id", UUID.randomUUID().toString());
-					validatedRow.put("created_date", createdDate);
-					validatedRow.put("final_status", "");
-					validatedRow.put("rule_status", "");
-					validatedRow.put("message", "");
-					validatedRow.remove("is_processed");
-					validatedRow.remove("uploaded_by");
-					validatedRow.remove("uploaded_date");
-					validatedRow.remove("created_date");
-					validatedRow.remove("organization_id");
-					validatedRow.remove("file_id");
-					validatedRow.remove("policy_id");
-					validatedRow.remove("totalRowsCount");
+					Map<String, AttributeValue> item = new LinkedHashMap<>(record);
 
-					// 1. Insert into validated table
-					if (!dynamoService.tableExists(masterDataTaskTable)) {
-						dynamoService.createTable(masterDataTaskTable);
-					}
-					dynamoService.insertValidatedMasterData(masterDataTaskTable, validatedRow);
+					String stgID = item.get("id").s();
 
-					// 2. Send to SQS
-					//prepare JSON format
-					String sqsMessage= prepareJsonMessage(validatedRow,fileId,authorizationHeader);
+					item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
+					item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
+
+					// Remove staging-only metadata
+					item.remove("is_processed");
+					item.remove("uploaded_by");
+					item.remove("uploaded_date");
+					item.remove("totalRowsCount");
+					item.remove("organization_id");
+					item.remove("file_id");
+					item.remove("policy_id");
+					
+					// (3) Insert into new DynamoDB table
+					dynamoService.insertValidatedMasterData(masterDataTaskTable, item);
+					
+					// (4) Send to SQS
+					String sqsMessage = prepareJsonMessageFromAv(item, fileId, policyId, domainName,
+							authorizationHeader);
 					sqsPublishingService.sendRecordToQueue(sqsMessage);
 
-					// 3. Update isprocessed
+					// (5) Mark staging as processed
 					dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
 
 					processedCount++;
-				} catch (Exception e) {
-					logger.error("Error processing record from file '{}': {}", fileName, e.getMessage());
+				} catch (Exception ex) {
+					logger.error("Error processing record from file '{}': {}", fileName, ex.getMessage());
+
 				}
 			}
 
+			dynamoService.updateStagingProcessedStatus(headerTable, fileId, "1");
+
 			return processedCount;
+			}
 
 		} catch (Exception e) {
 			logger.error("processAndSendToSqs exception: {}", e.toString());
 			throw new MasterdataServiceException("Process and send data to SQS failed: " + e.getMessage());
 		}
+		return 0;
+		
 	}
-     
-     private String prepareJsonMessage(Map<String, String> validatedRow,String fileID,String authorizationHeader) {
-    	 String jsonMessage="";
-	     try {
-    	 PolicyRoot policyRoot= jsonReader.getValidationRules(validatedRow.get("policy_id"), authorizationHeader);
-    	 
-    	 if(policyRoot !=null) {
-    		 if(policyRoot.getSuccess() && policyRoot.getTotalRecord()>0) {
-    			 List<ValidationRule> rules = new ArrayList<ValidationRule>();
-    				 Metadata metadata = new Metadata();
-    		    	 metadata.setDomainName(policyRoot.getData().getDomainName());
-    		    	 metadata.setFileId(fileID);
-    				 metadata.setPolicyId(policyRoot.getData().getPolicyId());
-    				
-    				 //Validation Rules
-    				 for(RuleItems ruleItem : policyRoot.getData().getRules()) {
-    				 ValidationRule rule = new ValidationRule();
-    				 rule.setRule_name(ruleItem.getRuleName());
-    				 rule.setColumn_name(ruleItem.getAppliesToField());
-    				 rule.setRule_description(ruleItem.getDescription());
-    				 rule.setValue(ruleItem.getParameters());
-    				 rules.add(rule);
-    				 }
-    				 
-    				 jsonMessage= builderService.build(metadata,validatedRow, rules);
-    		 }
-    	 
-    	 }
-    	 
-	     } catch (Exception e) {
-				logger.error("prepareJsonMessage exception: {}", e.toString());
-				throw new MasterdataServiceException("PrepareJsonMessage failed: " + e.getMessage());
-			} 
-	     return jsonMessage;
-     }
+
+	private static Object avToJava(AttributeValue v) {
+		if (v == null)
+			return null;
+		if (v.s() != null)
+			return v.s();
+		if (v.n() != null)
+			return new java.math.BigDecimal(v.n());
+		if (v.bool() != null)
+			return v.bool();
+		if (Boolean.TRUE.equals(v.nul()))
+			return null;
+
+		if (v.ss() != null && !v.ss().isEmpty())
+			return new java.util.ArrayList<>(v.ss());
+		if (v.ns() != null && !v.ns().isEmpty())
+			return v.ns().stream().map(java.math.BigDecimal::new).toList();
+		if (v.bs() != null && !v.bs().isEmpty())
+			return v.bs();
+
+		if (v.l() != null && !v.l().isEmpty())
+			return v.l().stream().map(MasterdataService::avToJava).toList();
+
+		if (v.m() != null && !v.m().isEmpty()) {
+			Map<String, Object> m = new LinkedHashMap<>();
+			v.m().forEach((k, vv) -> m.put(k, avToJava(vv)));
+			return m;
+		}
+		return null;
+	}
+
+	private static Map<String, Object> avMapToJava(Map<String, AttributeValue> item) {
+		Map<String, Object> out = new LinkedHashMap<>(item.size());
+		item.forEach((k, v) -> out.put(k, avToJava(v)));
+		return out;
+	}
+
+	private String prepareJsonMessageFromAv(Map<String, AttributeValue> item, String fileId, String policyId,
+			String domainName, String authorizationHeader) throws com.fasterxml.jackson.core.JsonProcessingException {
+		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+		Map<String, Object> payload = avMapToJava(item);
+
+		payload.put("file_id", fileId);
+		payload.put("policy_id", policyId);
+		payload.put("domain_name", domainName);
+
+		return mapper.writeValueAsString(payload);
+	}
 
 }

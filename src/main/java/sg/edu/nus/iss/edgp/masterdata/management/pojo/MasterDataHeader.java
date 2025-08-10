@@ -15,6 +15,6 @@ public class MasterDataHeader {
 	private int totalRowsCount=0;
 	private String uploadDate="";
 	private String uploadedBy="";
+	private int isProcessed=0;
 	
-
 }

@@ -34,20 +34,22 @@ public class HeaderService implements IHeaderService{
     }
     
     @Override
-    public List<Map<String, AttributeValue>> getFileByFileName(String headerTableName, String fileName) {
-        Map<String, AttributeValue> expressionValues = new HashMap<>();
-        expressionValues.put(":file_name", AttributeValue.builder().s(fileName).build());
+    public List<Map<String, AttributeValue>> getFileByFileName(String tableName, String fileName) {
+    	Map<String, AttributeValue> expressionValues = new HashMap<>();
+	    expressionValues.put(":file_name", AttributeValue.builder().s(fileName).build());
+	    expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
 
-        ScanRequest scanRequest = ScanRequest.builder()
-            .tableName(headerTableName)
-            .filterExpression("file_name = :file_name")
-            .expressionAttributeValues(expressionValues)
-            .build();
+	    ScanRequest scanRequest = ScanRequest.builder()
+	        .tableName(tableName)
+	        .filterExpression("file_name = :file_name AND is_processed = :is_processed")
+	        .expressionAttributeValues(expressionValues)
+	        .build();
 
-        List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
+	    List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
 
+        
         if (results.isEmpty()) {
-            throw new RuntimeException("fileName not found in header table: " + fileName);
+            System.out.print("No data to process with file : " + fileName);
         }
 
         return results;

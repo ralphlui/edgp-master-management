@@ -18,6 +18,7 @@ public class CSVUploadHeader {
     private final String uploadedBy;
     private final String uploadDate;
     private final int totalRows;
+    private final int isProcessed;
 
     public CSVUploadHeader( MasterDataHeader header) {
         this.id = header.getId();
@@ -28,6 +29,7 @@ public class CSVUploadHeader {
         this.uploadedBy = header.getUploadedBy();
         this.uploadDate = LocalDateTime.now().toString();
         this.totalRows = header.getTotalRowsCount();
+        this.isProcessed = header.getIsProcessed();
     }
 
     public Map<String, AttributeValue> toItem() {
@@ -40,6 +42,7 @@ public class CSVUploadHeader {
         item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
         item.put("upload_date", AttributeValue.builder().s(uploadDate).build());
         item.put("total_rows_count", AttributeValue.builder().n(String.valueOf(totalRows)).build());
+        item.put("is_processed", AttributeValue.builder().n(String.valueOf(isProcessed)).build());
         return item;
     }
 }

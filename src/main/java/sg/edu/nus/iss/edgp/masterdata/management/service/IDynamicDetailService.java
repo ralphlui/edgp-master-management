@@ -13,10 +13,10 @@ public interface IDynamicDetailService {
 	
 	void createTable(String tableName);
 	
-	void insertValidatedMasterData(String tableName, Map<String, String> rowData);
+	void insertValidatedMasterData(String tableName, Map<String, AttributeValue> rowData);
 	
 	
 	void updateStagingProcessedStatus(String tableName, String id, String newStatus);
 	
-	List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId,String uploadedBy);
+	List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId,String policyId,String domainName);
 }

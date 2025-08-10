@@ -21,18 +21,18 @@ import org.springframework.test.web.servlet.MockMvc;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DomainService;
 
 
-@WebMvcTest(CategoryController.class)
+@WebMvcTest(DomainController.class)
 @AutoConfigureMockMvc(addFilters = false)
-class CategoryControllerTest {
+class DomainControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
     @MockitoBean
-    private CategoryService categoryService;
+    private DomainService domainService;
     
     @MockitoBean
 	private JWTService jwtService;
@@ -46,10 +46,10 @@ class CategoryControllerTest {
     void getAllCategory_shouldReturnSuccess() throws Exception {
         List<String> mockCategories = List.of("Vendor", "Product", "Customer");
 
-        when(categoryService.findCategories()).thenReturn(mockCategories);
+        when(domainService.findDomains()).thenReturn(mockCategories);
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(new AuditDTO());
 
-        mockMvc.perform(get("/api/mdm/tables/category")
+        mockMvc.perform(get("/api/mdm/tables/domains")
                         .header("Authorization", "Bearer mock-token")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -62,10 +62,10 @@ class CategoryControllerTest {
     @Test
     @WithMockUser(authorities = {"SCOPE_view:mdm"})
     void getAllCategory_shouldReturn500OnException() throws Exception {
-        when(categoryService.findCategories()).thenThrow(new RuntimeException("Dynamo error"));
+        when(domainService.findDomains()).thenThrow(new RuntimeException("Dynamo error"));
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(new AuditDTO());
 
-        mockMvc.perform(get("/api/mdm/tables/category")
+        mockMvc.perform(get("/api/mdm/tables/domains")
                         .header("Authorization", "Bearer mock-token")
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isInternalServerError())

@@ -19,7 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.CategoryService;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DomainService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicDetailService;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -27,10 +27,10 @@ import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 
 @ExtendWith(MockitoExtension.class)
-class CategoryServiceTest {
+class DomainServiceTest {
 
     @InjectMocks
-    private CategoryService categoryService;
+    private DomainService domainService;
 
     @Mock
     private DynamoDbClient dynamoDbClient;
@@ -51,7 +51,7 @@ class CategoryServiceTest {
 
         when(dynamoDbClient.scan(any(ScanRequest.class))).thenReturn(mockResponse);
 
-        List<String> categories = categoryService.findCategories();
+        List<String> categories = domainService.findDomains();
 
         assertEquals(2, categories.size());
         assertTrue(categories.contains("Vendor"));
@@ -62,7 +62,7 @@ class CategoryServiceTest {
     void testFindCategories_tableNotExists_returnsEmptyList() {
         when(dynamicDetailService.tableExists(anyString())).thenReturn(false);
 
-        List<String> result = categoryService.findCategories();
+        List<String> result = domainService.findDomains();
 
         assertTrue(result.isEmpty());
     }
@@ -74,7 +74,7 @@ class CategoryServiceTest {
                 .thenThrow(RuntimeException.class);
 
         assertThrows(MasterdataServiceException.class, () -> {
-            categoryService.findCategories();
+        	domainService.findDomains();
         });
     }
 }
