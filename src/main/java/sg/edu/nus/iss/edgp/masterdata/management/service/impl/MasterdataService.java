@@ -28,7 +28,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -71,7 +70,7 @@ public class MasterdataService implements IMasterdataService {
 			header.setPolicyId(masterReq.getPolicyId().trim());
 			header.setUploadedBy(uploadedBy);
 			header.setTotalRowsCount(rows.size());
-			header.setProcessStatus(FileProcessStage.UNPROCESSED);
+			header.setProcessStage(FileProcessStage.UNPROCESSED);
 
 			String headerTableName = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME;
 			if (!dynamoService.tableExists(headerTableName)) {
@@ -202,17 +201,16 @@ public class MasterdataService implements IMasterdataService {
 		try {
 			
 			// 1) Header lookup
-			Optional<Map<String, AttributeValue>> file = headerService.fetchFileProcessStatus(FileProcessStage.UNPROCESSED);
+			Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.UNPROCESSED);
 
 			if (file.isEmpty()) {
 			    throw new MasterdataServiceException("File not found to process");
 			}
+ 
 
-			Map<String, AttributeValue> fileMap = file.get();
-
-			String fileId = fileMap.get("id").s();
-			String policyId = fileMap.get("policy_id").s();
-			String domainName = fileMap.get("domain_name").s();
+			String fileId = file.get().getId();
+			String policyId = file.get().getPolicyId();
+			String domainName = file.get().getDomainName();
 			
 
 			if (fileId == null || fileId.isEmpty() || policyId == null || policyId.isEmpty() || domainName == null

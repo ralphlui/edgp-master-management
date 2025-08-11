@@ -15,7 +15,9 @@ public class MasterDataHeader {
 	private String domainName="";
 	private int totalRowsCount=0;
 	private String uploadDate="";
+	private String updated_date="";
 	private String uploadedBy="";
-	private FileProcessStage processStatus = FileProcessStage.UNPROCESSED;
+	private FileProcessStage processStage = FileProcessStage.UNPROCESSED;
+	private boolean fileStatus=false;
 	
 }

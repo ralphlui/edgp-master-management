@@ -7,14 +7,8 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
-import com.fasterxml.jackson.databind.json.JsonMapper;
-
 import lombok.RequiredArgsConstructor;
-import sg.edu.nus.iss.edgp.masterdata.management.api.connector.AdminAPICall;
-import sg.edu.nus.iss.edgp.masterdata.management.api.connector.PolicyAPICall;
-import sg.edu.nus.iss.edgp.masterdata.management.api.connector.WorkflowAPICall;
-import sg.edu.nus.iss.edgp.masterdata.management.dto.WorkflowStatusResponse;
+import sg.edu.nus.iss.edgp.masterdata.management.api.connector.*;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.User;
 
@@ -23,9 +17,8 @@ import sg.edu.nus.iss.edgp.masterdata.management.pojo.User;
 public class JSONReader {
 
 	private final AdminAPICall adminAPICall;
-	private final WorkflowAPICall workflowAPICall;
 	private final PolicyAPICall policyAPICall;
-	private final JsonDataMapper mapper ;
+	 
 
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
 
@@ -75,22 +68,8 @@ public class JSONReader {
 		}
 		return null;
 	}
-	
-	public WorkflowStatusResponse getFileStatus(String fileId) {
-		String responseStr = workflowAPICall.getFileProcessStatus(fileId);
-		try {
-			if (responseStr != null && !responseStr.isEmpty()) {
-				return mapper.getFileStatus(responseStr);
-			}
-		} catch (Exception e) {
-			logger.error("Error parsing JSON response for getFileStatus...", e);
 
-		}
-		return null;
-		
-	}
-
-	public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
+	/*public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
 		 
 		String responseStr = policyAPICall.getRuleByPolicyId(policyId, authorizationHeader);
 		try {
@@ -102,5 +81,5 @@ public class JSONReader {
 
 		}
 		return null;
-	}
+	}*/
 }

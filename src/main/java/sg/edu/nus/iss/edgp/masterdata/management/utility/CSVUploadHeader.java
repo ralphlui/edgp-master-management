@@ -17,9 +17,11 @@ public class CSVUploadHeader {
     private final String organizationId;
     private final String policyId;
     private final String uploadedBy;
-    private final String uploadDate;
+    private final String uploadedDate;
+    private final String updatedDate;
     private final int totalRows;
-    private final FileProcessStage processStatus;
+    private final FileProcessStage processStage;
+    private final boolean fileStatus;
 
     public CSVUploadHeader( MasterDataHeader header) {
         this.id = header.getId();
@@ -28,9 +30,12 @@ public class CSVUploadHeader {
         this.policyId = header.getPolicyId();
         this.organizationId = header.getOrganizationId();
         this.uploadedBy = header.getUploadedBy();
-        this.uploadDate = LocalDateTime.now().toString();
+        this.uploadedDate = LocalDateTime.now().toString();
+        this.updatedDate = "";
         this.totalRows = header.getTotalRowsCount();
-        this.processStatus = header.getProcessStatus();
+        this.processStage = header.getProcessStage();
+        this.fileStatus = header.isFileStatus();
+        
     }
 
     public Map<String, AttributeValue> toItem() {
@@ -41,9 +46,12 @@ public class CSVUploadHeader {
         item.put("organization_id", AttributeValue.builder().s(organizationId).build());
         item.put("policy_id", AttributeValue.builder().s(policyId).build());
         item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
-        item.put("upload_date", AttributeValue.builder().s(uploadDate).build());
+        item.put("uploaded_date", AttributeValue.builder().s(uploadedDate).build());
+        item.put("updatedDate", AttributeValue.builder().s(updatedDate).build());
         item.put("total_rows_count", AttributeValue.builder().n(String.valueOf(totalRows)).build());
-        item.put("process_status", AttributeValue.builder().n(String.valueOf(processStatus)).build());
+        item.put("process_stage", AttributeValue.builder().s(String.valueOf(processStage)).build());
+        item.put("file_status", AttributeValue.builder().bool(fileStatus).build());
+        
         return item;
     }
 }

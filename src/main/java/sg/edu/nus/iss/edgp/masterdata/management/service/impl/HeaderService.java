@@ -35,35 +35,44 @@ public class HeaderService implements IHeaderService {
 	}
 
 	@Override
-	public Optional<Map<String, AttributeValue>> fetchFileProcessStatus(FileProcessStage processStage) {
+	public Optional<MasterDataHeader> fetchOldestByStage(FileProcessStage stage) {
 	    ScanRequest req = ScanRequest.builder()
 	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
 	        .filterExpression("#ps = :ps")
 	        .expressionAttributeNames(Map.of("#ps", "process_stage"))
-	        .expressionAttributeValues(Map.of(
-	            ":ps", AttributeValue.builder().s(processStage.name()).build()
-	        ))
-	        .projectionExpression("id, process_stage, created_date")
+	        .expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(stage.name()).build()))
+	        .projectionExpression("id, domain_name, organization_id, policy_id, uploaded_date")
 	        .build();
 
-	    Map<String, AttributeValue> best = null;
+	    Map<String, AttributeValue> resultItem = null;
+	    String resultUploaded = null;
 
 	    for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
 	        for (Map<String, AttributeValue> item : page.items()) {
-	            if (best == null) {
-	                best = item;
-	            } else {
-	               
-	                String a = item.get("created_date").s();
-	                String b = best.get("created_date").s();
-	                if (a.compareTo(b) < 0) best = item;
+	            AttributeValue idAttr  = item.get("id");
+	            AttributeValue upAttr  = item.get("uploaded_date");
+	            if (idAttr == null || upAttr == null || idAttr.s() == null || upAttr.s() == null) continue;
+
+	            String uploaded = upAttr.s();
+	            if (resultUploaded == null || uploaded.compareTo(resultUploaded) < 0) {
+	            	resultUploaded = uploaded;
+	            	resultItem = item;
 	            }
 	        }
-	        if (best != null) break;
 	    }
 
-	    return Optional.ofNullable(best);
+	    if (resultItem == null) return Optional.empty();
+
+	    MasterDataHeader header = new MasterDataHeader();
+	    header.setId(resultItem.get("id").s());
+	    header.setDomainName(resultItem.get("domain_name").s());
+	    header.setOrganizationId(resultItem.get("organization_id").s());
+	    header.setPolicyId(resultItem.get("policy_id").s());
+	    
+
+	    return Optional.of(header);
 	}
+
  
 
 	@Override
@@ -73,7 +82,7 @@ public class HeaderService implements IHeaderService {
 
 		UpdateItemRequest req = UpdateItemRequest.builder()
 				.tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim()).key(key)
-				.updateExpression("SET #ps = :ps, updated_at = :now")
+				.updateExpression("SET #ps = :ps, updated_date = :now")
 				.expressionAttributeNames(Map.of("#ps", "process_stage"))
 				.expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(processStage.name()).build(),
 						 ":now",
