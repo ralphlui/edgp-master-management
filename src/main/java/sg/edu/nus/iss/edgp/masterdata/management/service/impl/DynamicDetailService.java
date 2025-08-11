@@ -202,7 +202,7 @@ public class DynamicDetailService implements IDynamicDetailService {
         try {
             GetItemRequest getItemRequest = GetItemRequest.builder()
                     .tableName(tableName)
-                    .key(Map.of("id", AttributeValue.builder().s(id).build())) // "id" is the partition key
+                    .key(Map.of("id", AttributeValue.builder().s(id).build()))
                     .build();
 
             GetItemResponse response = dynamoDbClient.getItem(getItemRequest);

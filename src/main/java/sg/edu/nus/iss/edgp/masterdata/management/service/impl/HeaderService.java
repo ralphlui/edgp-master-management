@@ -42,7 +42,7 @@ public class HeaderService implements IHeaderService {
 	        .filterExpression("#ps = :ps")
 	        .expressionAttributeNames(Map.of("#ps", "process_stage"))
 	        .expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(stage.name()).build()))
-	        .projectionExpression("id, domain_name, organization_id, policy_id, uploaded_date")
+	        .projectionExpression("id, domain_name, organization_id, policy_id,uploaded_by, uploaded_date,total_rows_count")
 	        .build();
 
 	    Map<String, AttributeValue> resultItem = null;
@@ -69,7 +69,8 @@ public class HeaderService implements IHeaderService {
 	    header.setDomainName(resultItem.get("domain_name").s());
 	    header.setOrganizationId(resultItem.get("organization_id").s());
 	    header.setPolicyId(resultItem.get("policy_id").s());
-	    
+	    header.setUploadedBy(resultItem.get("uploaded_by").s());
+	    header.setTotalRowsCount(Integer.parseInt(resultItem.get("total_rows_count").n()));
 
 	    return Optional.of(header);
 	}
@@ -95,18 +96,30 @@ public class HeaderService implements IHeaderService {
 	
 	@Override
 	public boolean filenameExists(String filename) {
+	    String fn = filename == null ? null : filename.trim();
+	    if (fn == null || fn.isEmpty()) {
+	     
+	        throw new IllegalArgumentException("filename must not be blank");
+	    }
+
 	    ScanRequest req = ScanRequest.builder()
 	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
 	        .filterExpression("#fn = :fn")
 	        .expressionAttributeNames(Map.of("#fn", "file_name"))
-	        .expressionAttributeValues(Map.of(":fn", AttributeValue.builder().s(filename).build()))
+	        .expressionAttributeValues(Map.of(":fn", AttributeValue.builder().s(fn).build()))
 	        .select(Select.COUNT)
 	        .build();
 
-	    for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
-	        if (page.count() > 0) return true;
+	    try {
+	        for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
+	            if (page.count() > 0) return true;
+	        }
+	        return false;
+	    } catch (software.amazon.awssdk.services.dynamodb.model.DynamoDbException e) {
+	        
+	        System.out.println("filenameExists scan failed:"+ e.getMessage()+ e);
+	        throw e;
 	    }
-	    return false;
 	}
 
 

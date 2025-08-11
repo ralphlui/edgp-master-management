@@ -2,6 +2,7 @@ package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
 
 import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.HeaderService;
 
 @RequiredArgsConstructor
+@Component
 public class DataUploadValidation {
 	
 	private final JSONReader jsonReader;

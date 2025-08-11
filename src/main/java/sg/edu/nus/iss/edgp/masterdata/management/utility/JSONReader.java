@@ -7,6 +7,9 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.*;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
@@ -70,7 +73,7 @@ public class JSONReader {
 	}
 
 	public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
-		 
+
 		String responseStr = policyAPICall.getRuleByPolicyId(policyId, authorizationHeader);
 		try {
 			if (responseStr != null && !responseStr.isEmpty()) {
@@ -81,5 +84,21 @@ public class JSONReader {
 
 		}
 		return null;
+	}
+
+	public String getAccessToken(String email) {
+		JSONObject jsonResponse = new JSONObject();
+		String responseStr = adminAPICall.getAccessToken(email);
+		try {
+			JSONParser parser = new JSONParser();
+			jsonResponse = (JSONObject) parser.parse(responseStr);
+			JSONObject data = (JSONObject) jsonResponse.get("data");
+			return data.get("token").toString();
+
+		} catch (Exception e) {
+			logger.error("Error parsing JSON response for getActiveUserDetails...", e);
+
+		}
+		return "";
 	}
 }

@@ -22,7 +22,7 @@ public class PayloadBuilderService {
         this.mapper = new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL);
     }
 
-    public String build(Metadata meta, Map<String,String> record, List<ValidationRule> rules) throws Exception {
+    public String build(Metadata meta, Map<String, Object> record, List<ValidationRule> rules) throws Exception {
         ObjectNode root = mapper.createObjectNode();
         ObjectNode entry = root.putObject("data_entry");
 

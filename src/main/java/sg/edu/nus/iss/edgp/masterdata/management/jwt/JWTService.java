@@ -68,6 +68,18 @@ public class JWTService {
 		return extractClaim(token, Claims::getSubject);
 	}
 	
+	public String extractUserEmailFromToken(String token) {
+	    try {
+	        Claims claims = extractAllClaims(token);
+	        return claims.get(USER_EMAIL, String.class);
+	    } catch (ExpiredJwtException e) {
+	        return e.getClaims().get(USER_EMAIL, String.class);
+	    } catch (Exception e) {
+	        return "";
+	    }
+	}
+	
+	
 	public <T> T extractClaim(String token, Function<Claims, T> claimResolver)
 			throws JwtException, IllegalArgumentException, Exception {
 		final Claims cliams = extractAllClaims(token);

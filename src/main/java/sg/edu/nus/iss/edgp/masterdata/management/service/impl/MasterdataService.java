@@ -12,22 +12,29 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.RuleItems;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.Metadata;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.ValidationRule;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -46,6 +53,8 @@ public class MasterdataService implements IMasterdataService {
 	private final HeaderService headerService;
 	private final SQSPublishingService sqsPublishingService;
 	private final JSONWriterService stagingWriterService;
+	private final PayloadBuilderService payloadBuilderService;
+	private final JSONReader jsonReader;
 
 	@Override
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
@@ -58,7 +67,7 @@ public class MasterdataService implements IMasterdataService {
 			}
 
 			String jwtToken = authorizationHeader.substring(7);
-			String uploadedBy = jwtService.extractSubject(jwtToken);
+			String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
 
 			String fileName = file.getOriginalFilename();
 			String headerId = UUID.randomUUID().toString();
@@ -199,90 +208,104 @@ public class MasterdataService implements IMasterdataService {
 		String workflowStatus = DynamoConstants.WORKFLOW_STATUS_TABLE_NAME.trim();
 
 		try {
-			
+
 			// 1) Header lookup
 			Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.UNPROCESSED);
 
 			if (file.isEmpty()) {
-			    throw new MasterdataServiceException("File not found to process");
-			}
- 
+				logger.info("File not found to process");
 
-			String fileId = file.get().getId();
-			String policyId = file.get().getPolicyId();
-			String domainName = file.get().getDomainName();
-			
+			} else {
 
-			if (fileId == null || fileId.isEmpty() || policyId == null || policyId.isEmpty() || domainName == null
-					|| domainName.isEmpty()) {
-				throw new MasterdataServiceException("Missing header info (fileId/policyId/domainName).");
-			}
+				String fileId = file.get().getId();
+				String policyId = file.get().getPolicyId();
+				String domainName = file.get().getDomainName();
+				String uploadedBy = file.get().getUploadedBy();
+				int totalCount =file.get().getTotalRowsCount();
+				String organizationId= file.get().getOrganizationId();
 
-			// 2) Unprocessed staging
-			List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
-					fileId, policyId, domainName);
-
-			if (!dynamoService.tableExists(workflowStatus)) {
-				dynamoService.createTable(workflowStatus);
-			}
-
-			int processedCount = 0;
-			String createdDateIso = java.time.LocalDateTime.now().toString();
-
-			for (Map<String, AttributeValue> record : records) {
-				try {
-
-					Map<String, AttributeValue> item = new LinkedHashMap<>(record);
-
-					String stgID = item.get("id").s();
-
-					item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
-					item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
-					item.put("domain_name", AttributeValue.builder().s(domainName).build());
-					
-					// Remove staging-only metadata
-					item.remove("is_processed");
-					item.remove("uploaded_by");
-					item.remove("uploaded_date");
-					item.remove("totalRowsCount");
-					
-					
-					// (3) Insert into new DynamoDB table
-					dynamoService.insertValidatedMasterData(workflowStatus, item);
-					
-					item.remove("organization_id");
-					item.remove("file_id");
-					item.remove("policy_id");
-					item.remove("domain_name");
-					// (4) Send to SQS
-					String sqsMessage = prepareJsonMessageFromAv(item, fileId, policyId, domainName);
-					sqsPublishingService.sendRecordToQueue(sqsMessage);
-					
-					// (5) File stage as processig
-					headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
-
-					// (6) Mark staging as processed
-					dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
-
-					processedCount++;
-				} catch (Exception ex) {
-					logger.error("Error processing record : {}",   ex.getMessage());
-
+				if (fileId == null || fileId.isEmpty() || organizationId == null 
+						|| organizationId.isEmpty() || policyId == null || policyId.isEmpty() || domainName == null
+						|| domainName.isEmpty() || uploadedBy == null || uploadedBy.isEmpty()) {
+					throw new MasterdataServiceException(
+							"Missing header info (fileId/policyId/domainName/Uploaded User).");
 				}
+
+				// 2) Unprocessed staging
+				List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
+						fileId, policyId, domainName);
+
+				if (!dynamoService.tableExists(workflowStatus)) {
+					dynamoService.createTable(workflowStatus);
+				}
+
+				int processedCount = 0;
+				 
+				String createdDateIso = java.time.LocalDateTime.now().toString();
+
+				for (Map<String, AttributeValue> record : records) {
+					try {
+
+						Map<String, AttributeValue> item = new LinkedHashMap<>(record);
+
+						String stgID = item.get("id").s();
+
+						item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
+						item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
+						item.put("domain_name", AttributeValue.builder().s(domainName).build());
+
+						// Remove staging-only metadata
+						item.remove("is_processed");
+						item.remove("uploaded_by");
+						item.remove("uploaded_date");
+						 
+						
+						item.remove("organization_id");
+						item.remove("file_id");
+						item.remove("policy_id");
+						item.remove("domain_name");
+						
+						// (3) Send to SQS
+						String sqsMessage = prepareJsonMessage(item, fileId, policyId, domainName, uploadedBy);
+						if (!sqsMessage.isEmpty()) {
+							sqsPublishingService.sendRecordToQueue(sqsMessage);
+							item.put("organization_id", AttributeValue.builder().s(organizationId).build());
+							item.put("file_id",AttributeValue.builder().s(fileId).build());
+							item.put("policy_id",AttributeValue.builder().s(policyId).build());
+							item.put("domain_name",AttributeValue.builder().s(domainName).build());
+							item.put("uploaded_by",AttributeValue.builder().s(uploadedBy).build());
+							
+							// (4) Insert into Workflow Status table
+							dynamoService.insertValidatedMasterData(workflowStatus, item);
+
+
+							// (5) Mark file stage as processig
+							headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
+
+							// (6) Mark staging as processed
+							dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
+
+							processedCount++;
+						}
+					} catch (Exception ex) {
+						logger.error("Error processing record : {}", ex.getMessage());
+
+					}
+				}
+				if (processedCount > 0) {
+					if (processedCount == totalCount)
+						dynamoService.updateStagingProcessedStatus(headerTable, fileId, "1");
+				}
+				return processedCount;
 			}
-
-			dynamoService.updateStagingProcessedStatus(headerTable, fileId, "1");
-
-			return processedCount;
-			
 
 		} catch (Exception e) {
 			logger.error("processAndSendToSqs exception: {}", e.toString());
 			throw new MasterdataServiceException("Process and send data to SQS failed: " + e.getMessage());
 		}
-		 
-	}
+		return 0;
 
+	}
 
 	private static Object avToJava(AttributeValue v) {
 		if (v == null)
@@ -320,16 +343,49 @@ public class MasterdataService implements IMasterdataService {
 		return out;
 	}
 
-	private String prepareJsonMessageFromAv(Map<String, AttributeValue> item, String fileId, String policyId,
-			String domainName) throws com.fasterxml.jackson.core.JsonProcessingException {
-		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-		Map<String, Object> payload = avMapToJava(item);
+	private String prepareJsonMessage(Map<String, AttributeValue> item, String fileId, String policyId,
+			String domainName, String uploadedUser) throws com.fasterxml.jackson.core.JsonProcessingException {
 
-		payload.put("file_id", fileId);
-		payload.put("policy_id", policyId);
-		payload.put("domain_name", domainName);
+		try {
 
-		return mapper.writeValueAsString(payload);
+			Metadata mData = new Metadata();
+			mData.setDomainName(domainName.trim());
+			mData.setFileId(fileId.trim());
+			mData.setPolicyId(policyId.trim());
+
+			Map<String, Object> payload = avMapToJava(item);
+
+			List<ValidationRule> rules = new ArrayList<ValidationRule>();
+			// find authHeader by uploadeduser
+			String authHeader = jsonReader.getAccessToken(uploadedUser);
+			
+
+			if (authHeader != null && !authHeader.isEmpty()) {
+				authHeader ="Bearer "+authHeader;
+				PolicyRoot policyRoot = jsonReader.getValidationRules(policyId, authHeader);
+				if (policyRoot != null) {
+					
+
+   				 //Validation Rules
+   				 for(RuleItems ruleItem : policyRoot.getData().getRules()) {
+   				 ValidationRule rule = new ValidationRule();
+   				 rule.setRule_name(ruleItem.getRuleName());
+   				 rule.setColumn_name(ruleItem.getAppliesToField());
+   				 rule.setRule_description(ruleItem.getDescription());
+   				 rule.setValue(ruleItem.getParameters());
+   				 rules.add(rule);
+   				 }
+
+					return payloadBuilderService.build(mData, payload, rules);
+				}
+			}
+
+		} catch (Exception e) {
+			logger.error("prepareJsonMessageFromAv exception: {}", e.toString());
+			throw new MasterdataServiceException("Prepare Json Message failed: " + e.getMessage());
+		}
+		return "";
+
 	}
 
 }

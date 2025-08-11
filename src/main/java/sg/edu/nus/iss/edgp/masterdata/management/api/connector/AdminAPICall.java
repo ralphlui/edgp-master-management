@@ -28,10 +28,36 @@ public class AdminAPICall {
 			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
 			String url = adminURL.trim() + "/users/profile";
-			logger.info(url);
+		
 
 			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))
 					.header("Authorization", authorizationHeader).header("X-User-Id", userId).header("Content-Type", "application/json")
+					.GET().build();
+
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+			responseStr = response.body();
+
+			logger.info("Active user detail response: {}", responseStr);
+
+		} catch (Exception e) {
+			logger.error(GET_SPECIFIC_ACTIVE_USERS_EXCEPTION_MSG, e);
+		}
+
+		return responseStr;
+	}
+	
+	public String getAccessToken(String email) {
+		logger.info("Get access token is calling ..");
+		String responseStr = "";
+
+		try {
+			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
+
+			String url = adminURL.trim() + "/users/accessToken";
+			
+
+			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))
+					.header("X-User-Email", email).header("Content-Type", "application/json")
 					.GET().build();
 
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
