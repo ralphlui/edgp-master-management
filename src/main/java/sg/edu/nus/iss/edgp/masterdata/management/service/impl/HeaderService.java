@@ -17,6 +17,7 @@ import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.Select;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @Service
@@ -91,5 +92,22 @@ public class HeaderService implements IHeaderService {
 
 		dynamoDbClient.updateItem(req);
 	}
+	
+	@Override
+	public boolean filenameExists(String filename) {
+	    ScanRequest req = ScanRequest.builder()
+	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
+	        .filterExpression("#fn = :fn")
+	        .expressionAttributeNames(Map.of("#fn", "file_name"))
+	        .expressionAttributeValues(Map.of(":fn", AttributeValue.builder().s(filename).build()))
+	        .select(Select.COUNT)
+	        .build();
+
+	    for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
+	        if (page.count() > 0) return true;
+	    }
+	    return false;
+	}
+
 
 }

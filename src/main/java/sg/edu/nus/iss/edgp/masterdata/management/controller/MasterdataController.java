@@ -62,8 +62,8 @@ public class MasterdataController {
 			ValidationResult validResult = dataUploadValidation.isValidToUpload(file, uploadReq, authorizationHeader);
 			if(!validResult.isValid()) {
 				message = "Upload failed due to :" +validResult.getMessage();
-				auditService.logAudit(auditDTO, 400, message, authorizationHeader);
-				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(APIResponse.error(message));
+				auditService.logAudit(auditDTO, Integer.parseInt(validResult.getStatus().toString()), message, authorizationHeader);
+				return ResponseEntity.status(validResult.getStatus()).body(APIResponse.error(message));
 
 			}
 			UploadResult result = masterdataService.uploadCsvDataToTable(file, uploadReq,authorizationHeader);

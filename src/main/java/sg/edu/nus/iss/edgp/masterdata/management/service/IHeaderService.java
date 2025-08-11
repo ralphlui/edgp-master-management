@@ -12,4 +12,6 @@ public interface IHeaderService {
 	Optional<MasterDataHeader> fetchOldestByStage(FileProcessStage stage);
 	
 	void updateFileStage(String fileId, FileProcessStage processStage);
+	
+	boolean filenameExists(String filename);
 }
