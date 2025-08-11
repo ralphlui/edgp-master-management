@@ -21,6 +21,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceExce
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DataUploadValidation;
 
 @RestController
 @RequiredArgsConstructor
@@ -30,6 +31,8 @@ public class MasterdataController {
 
 	private final MasterdataService masterdataService;
 	private final AuditService auditService;
+	private final DataUploadValidation dataUploadValidation;
+	 
 	
 
 	@Value("${audit.activity.type.prefix}")
@@ -56,12 +59,18 @@ public class MasterdataController {
 				httpMethod);
 
 		try {
-			 
+			ValidationResult validResult = dataUploadValidation.isValidToUpload(file, uploadReq, authorizationHeader);
+			if(!validResult.isValid()) {
+				message = "Upload failed due to :" +validResult.getMessage();
+				auditService.logAudit(auditDTO, 400, message, authorizationHeader);
+				return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(APIResponse.error(message));
+
+			}
 			UploadResult result = masterdataService.uploadCsvDataToTable(file, uploadReq,authorizationHeader);
 			if (result.getTotalRecord()< 1) {
-				message = "Upload failed due to incorrect column format or missing values.";
+				message = "Upload failed due to incorrect data or missing values.";
 				auditService.logAudit(auditDTO, 500, message, authorizationHeader);
-				return ResponseEntity.status(HttpStatus.NOT_FOUND).body(APIResponse.error(message));
+				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
 
 			}
 			

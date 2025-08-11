@@ -18,7 +18,7 @@ public class JSONReader {
 
 	private final AdminAPICall adminAPICall;
 	private final PolicyAPICall policyAPICall;
-	 
+	private final JSONDataMapper mapper;
 
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
 
@@ -69,7 +69,7 @@ public class JSONReader {
 		return null;
 	}
 
-	/*public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
+	public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
 		 
 		String responseStr = policyAPICall.getRuleByPolicyId(policyId, authorizationHeader);
 		try {
@@ -81,5 +81,5 @@ public class JSONReader {
 
 		}
 		return null;
-	}*/
+	}
 }
