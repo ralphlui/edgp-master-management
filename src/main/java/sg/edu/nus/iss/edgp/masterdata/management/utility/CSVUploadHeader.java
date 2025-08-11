@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
+import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
@@ -18,7 +19,7 @@ public class CSVUploadHeader {
     private final String uploadedBy;
     private final String uploadDate;
     private final int totalRows;
-    private final int isProcessed;
+    private final FileProcessStage processStatus;
 
     public CSVUploadHeader( MasterDataHeader header) {
         this.id = header.getId();
@@ -29,7 +30,7 @@ public class CSVUploadHeader {
         this.uploadedBy = header.getUploadedBy();
         this.uploadDate = LocalDateTime.now().toString();
         this.totalRows = header.getTotalRowsCount();
-        this.isProcessed = header.getIsProcessed();
+        this.processStatus = header.getProcessStatus();
     }
 
     public Map<String, AttributeValue> toItem() {
@@ -42,7 +43,7 @@ public class CSVUploadHeader {
         item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
         item.put("upload_date", AttributeValue.builder().s(uploadDate).build());
         item.put("total_rows_count", AttributeValue.builder().n(String.valueOf(totalRows)).build());
-        item.put("is_processed", AttributeValue.builder().n(String.valueOf(isProcessed)).build());
+        item.put("process_status", AttributeValue.builder().n(String.valueOf(processStatus)).build());
         return item;
     }
 }

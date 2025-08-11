@@ -1,15 +1,20 @@
 package sg.edu.nus.iss.edgp.masterdata.management.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+import lombok.Getter;
+import lombok.Setter;
+
+@Getter
+@Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class WorkflowStatusResponse {
+	
+	@JsonProperty("file_id")
     private String fileId;
-    private int totalRecords;
-    private int processedRecords;
-    private String status; // "DONE" or "PROCESSING"
+	
+	@JsonProperty("status")
+    private String status; // "true" or "false"
 }

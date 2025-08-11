@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.AdminAPICall;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.PolicyAPICall;
 import sg.edu.nus.iss.edgp.masterdata.management.api.connector.WorkflowAPICall;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.WorkflowStatusResponse;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.User;
 
@@ -24,6 +25,7 @@ public class JSONReader {
 	private final AdminAPICall adminAPICall;
 	private final WorkflowAPICall workflowAPICall;
 	private final PolicyAPICall policyAPICall;
+	private final JsonDataMapper mapper ;
 
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
 
@@ -73,23 +75,23 @@ public class JSONReader {
 		}
 		return null;
 	}
-
-	public JSONObject getLatestFileStatusInfo() {
-		JSONObject jsonResponse = new JSONObject();
-		String responseStr = workflowAPICall.getLatestFileProcessStatus();
+	
+	public WorkflowStatusResponse getFileStatus(String fileId) {
+		String responseStr = workflowAPICall.getFileProcessStatus(fileId);
 		try {
-			JSONParser parser = new JSONParser();
-			jsonResponse = (JSONObject) parser.parse(responseStr);
-			return jsonResponse;
-		} catch (ParseException e) {
-			logger.error("Error parsing JSON response for getLatestFileStatusInfo...", e);
+			if (responseStr != null && !responseStr.isEmpty()) {
+				return mapper.getFileStatus(responseStr);
+			}
+		} catch (Exception e) {
+			logger.error("Error parsing JSON response for getFileStatus...", e);
 
 		}
-		return jsonResponse;
+		return null;
+		
 	}
 
 	public PolicyRoot getValidationRules(String policyId, String authorizationHeader) {
-		JsonDataMapper mapper = new JsonDataMapper();
+		 
 		String responseStr = policyAPICall.getRuleByPolicyId(policyId, authorizationHeader);
 		try {
 			if (responseStr != null && !responseStr.isEmpty()) {

@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingServic
 import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
+import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
@@ -69,7 +71,7 @@ public class MasterdataService implements IMasterdataService {
 			header.setPolicyId(masterReq.getPolicyId().trim());
 			header.setUploadedBy(uploadedBy);
 			header.setTotalRowsCount(rows.size());
-			header.setIsProcessed(0);
+			header.setProcessStatus(FileProcessStage.UNPROCESSED);
 
 			String headerTableName = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME;
 			if (!dynamoService.tableExists(headerTableName)) {
@@ -192,26 +194,26 @@ public class MasterdataService implements IMasterdataService {
 	}
 
 	@Override
-	public int processAndSendRawDataToSqs(String fileName, String authorizationHeader) {
+	public int processAndSendRawDataToSqs() {
 		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
-		String masterDataTaskTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
+		String workflowStatus = DynamoConstants.WORKFLOW_STATUS_TABLE_NAME.trim();
 
 		try {
-			String jwtToken = authorizationHeader.substring(7);
-			String uploadedBy = jwtService.extractSubject(jwtToken);
-
-			// 1) Header lookup
-			List<Map<String, AttributeValue>> files = headerService.getFileByFileName(headerTable, fileName);
-			if (files == null ) {
-				throw new MasterdataServiceException("Header not found for file: " + fileName);
-			}
-			if(!files.isEmpty()) {
-				
 			
-			String fileId = files.get(0).get("id").s();
-			String policyId = files.get(0).get("policy_id").s();
-			String domainName = files.get(0).get("domain_name").s();
+			// 1) Header lookup
+			Optional<Map<String, AttributeValue>> file = headerService.fetchFileProcessStatus(FileProcessStage.UNPROCESSED);
+
+			if (file.isEmpty()) {
+			    throw new MasterdataServiceException("File not found to process");
+			}
+
+			Map<String, AttributeValue> fileMap = file.get();
+
+			String fileId = fileMap.get("id").s();
+			String policyId = fileMap.get("policy_id").s();
+			String domainName = fileMap.get("domain_name").s();
+			
 
 			if (fileId == null || fileId.isEmpty() || policyId == null || policyId.isEmpty() || domainName == null
 					|| domainName.isEmpty()) {
@@ -222,8 +224,8 @@ public class MasterdataService implements IMasterdataService {
 			List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
 					fileId, policyId, domainName);
 
-			if (!dynamoService.tableExists(masterDataTaskTable)) {
-				dynamoService.createTable(masterDataTaskTable);
+			if (!dynamoService.tableExists(workflowStatus)) {
+				dynamoService.createTable(workflowStatus);
 			}
 
 			int processedCount = 0;
@@ -238,30 +240,35 @@ public class MasterdataService implements IMasterdataService {
 
 					item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
 					item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
-
+					item.put("domain_name", AttributeValue.builder().s(domainName).build());
+					
 					// Remove staging-only metadata
 					item.remove("is_processed");
 					item.remove("uploaded_by");
 					item.remove("uploaded_date");
 					item.remove("totalRowsCount");
+					
+					
+					// (3) Insert into new DynamoDB table
+					dynamoService.insertValidatedMasterData(workflowStatus, item);
+					
 					item.remove("organization_id");
 					item.remove("file_id");
 					item.remove("policy_id");
-					
-					// (3) Insert into new DynamoDB table
-					dynamoService.insertValidatedMasterData(masterDataTaskTable, item);
-					
+					item.remove("domain_name");
 					// (4) Send to SQS
-					String sqsMessage = prepareJsonMessageFromAv(item, fileId, policyId, domainName,
-							authorizationHeader);
+					String sqsMessage = prepareJsonMessageFromAv(item, fileId, policyId, domainName);
 					sqsPublishingService.sendRecordToQueue(sqsMessage);
+					
+					// (5) File stage as processig
+					headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
 
-					// (5) Mark staging as processed
+					// (6) Mark staging as processed
 					dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
 
 					processedCount++;
 				} catch (Exception ex) {
-					logger.error("Error processing record from file '{}': {}", fileName, ex.getMessage());
+					logger.error("Error processing record : {}",   ex.getMessage());
 
 				}
 			}
@@ -269,15 +276,15 @@ public class MasterdataService implements IMasterdataService {
 			dynamoService.updateStagingProcessedStatus(headerTable, fileId, "1");
 
 			return processedCount;
-			}
+			
 
 		} catch (Exception e) {
 			logger.error("processAndSendToSqs exception: {}", e.toString());
 			throw new MasterdataServiceException("Process and send data to SQS failed: " + e.getMessage());
 		}
-		return 0;
-		
+		 
 	}
+
 
 	private static Object avToJava(AttributeValue v) {
 		if (v == null)
@@ -316,7 +323,7 @@ public class MasterdataService implements IMasterdataService {
 	}
 
 	private String prepareJsonMessageFromAv(Map<String, AttributeValue> item, String fileId, String policyId,
-			String domainName, String authorizationHeader) throws com.fasterxml.jackson.core.JsonProcessingException {
+			String domainName) throws com.fasterxml.jackson.core.JsonProcessingException {
 		var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
 		Map<String, Object> payload = avMapToJava(item);
 

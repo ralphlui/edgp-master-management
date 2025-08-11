@@ -30,7 +30,8 @@ public class PolicyAPICall {
 			logger.info(url);
 
 			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))
-					.header("Authorization", authorizationHeader).header("X-Policy-Id", policyId).header("Content-Type", "application/json")
+					.header("Authorization", authorizationHeader)
+					.header("X-Policy-Id", policyId).header("Content-Type", "application/json")
 					.GET().build();
 
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());

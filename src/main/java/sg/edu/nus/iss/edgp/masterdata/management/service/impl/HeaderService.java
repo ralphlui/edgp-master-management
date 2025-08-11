@@ -1,58 +1,86 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IHeaderService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVUploadHeader;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @Service
 @RequiredArgsConstructor
-public class HeaderService implements IHeaderService{
+public class HeaderService implements IHeaderService {
 
-    private final DynamoDbClient dynamoDbClient;
+	private final DynamoDbClient dynamoDbClient;
 
-    @Override
-    public void saveHeader(String tableName,MasterDataHeader header) {
-        CSVUploadHeader csvUpHeader = new CSVUploadHeader(header);
+	@Override
+	public void saveHeader(String tableName, MasterDataHeader header) {
+		CSVUploadHeader csvUpHeader = new CSVUploadHeader(header);
 
-        PutItemRequest request = PutItemRequest.builder()
-                .tableName(tableName)
-                .item(csvUpHeader.toItem())
-                .build();
+		PutItemRequest request = PutItemRequest.builder().tableName(tableName).item(csvUpHeader.toItem()).build();
 
-        dynamoDbClient.putItem(request);
-    }
-    
-    @Override
-    public List<Map<String, AttributeValue>> getFileByFileName(String tableName, String fileName) {
-    	Map<String, AttributeValue> expressionValues = new HashMap<>();
-	    expressionValues.put(":file_name", AttributeValue.builder().s(fileName).build());
-	    expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
+		dynamoDbClient.putItem(request);
+	}
 
-	    ScanRequest scanRequest = ScanRequest.builder()
-	        .tableName(tableName)
-	        .filterExpression("file_name = :file_name AND is_processed = :is_processed")
-	        .expressionAttributeValues(expressionValues)
+	@Override
+	public Optional<Map<String, AttributeValue>> fetchFileProcessStatus(FileProcessStage processStage) {
+	    ScanRequest req = ScanRequest.builder()
+	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
+	        .filterExpression("#ps = :ps")
+	        .expressionAttributeNames(Map.of("#ps", "process_stage"))
+	        .expressionAttributeValues(Map.of(
+	            ":ps", AttributeValue.builder().s(processStage.name()).build()
+	        ))
+	        .projectionExpression("id, process_stage, created_date")
 	        .build();
 
-	    List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
+	    Map<String, AttributeValue> best = null;
 
-        
-        if (results.isEmpty()) {
-            System.out.print("No data to process with file : " + fileName);
-        }
+	    for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
+	        for (Map<String, AttributeValue> item : page.items()) {
+	            if (best == null) {
+	                best = item;
+	            } else {
+	               
+	                String a = item.get("created_date").s();
+	                String b = best.get("created_date").s();
+	                if (a.compareTo(b) < 0) best = item;
+	            }
+	        }
+	        if (best != null) break;
+	    }
 
-        return results;
-    }
+	    return Optional.ofNullable(best);
+	}
+ 
+
+	@Override
+	public void updateFileStage(String fileId, FileProcessStage processStage) {
+
+		Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(fileId).build());
+
+		UpdateItemRequest req = UpdateItemRequest.builder()
+				.tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim()).key(key)
+				.updateExpression("SET #ps = :ps, updated_at = :now")
+				.expressionAttributeNames(Map.of("#ps", "process_stage"))
+				.expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(processStage.name()).build(),
+						 ":now",
+						AttributeValue.builder().s(java.time.Instant.now().toString()).build()))
+				.conditionExpression("attribute_exists(id)").returnValues(ReturnValue.UPDATED_NEW).build();
+
+		dynamoDbClient.updateItem(req);
+	}
 
 }

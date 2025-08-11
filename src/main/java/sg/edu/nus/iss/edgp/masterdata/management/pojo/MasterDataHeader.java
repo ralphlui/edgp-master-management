@@ -2,6 +2,7 @@ package sg.edu.nus.iss.edgp.masterdata.management.pojo;
 
 import lombok.Getter;
 import lombok.Setter;
+import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 
 @Getter
 @Setter
@@ -15,6 +16,6 @@ public class MasterDataHeader {
 	private int totalRowsCount=0;
 	private String uploadDate="";
 	private String uploadedBy="";
-	private int isProcessed=0;
+	private FileProcessStage processStatus = FileProcessStage.UNPROCESSED;
 	
 }

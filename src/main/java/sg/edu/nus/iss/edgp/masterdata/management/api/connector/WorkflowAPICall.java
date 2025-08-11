@@ -19,18 +19,19 @@ public class WorkflowAPICall {
 
 	private static final Logger logger = LoggerFactory.getLogger(WorkflowAPICall.class);
 	 
-	public String getLatestFileProcessStatus() {
+	public String getFileProcessStatus(String fileId) {
 		logger.info("Get Latest File Process Status API is calling ..");
 		String responseStr = "";
 
 		try {
 			HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(30)).build();
 
-			String url = workflowURL.trim() + "/status/active";
+			String url = workflowURL.trim() + "/file/processed";
 			logger.info(url);
 
 			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))
-				    .header("Content-Type", "application/json")
+					.header("X-File-Id", fileId)
+					.header("Content-Type", "application/json")
 					.GET().build();
 
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());

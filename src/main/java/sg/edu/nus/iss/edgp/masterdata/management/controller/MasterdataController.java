@@ -77,43 +77,6 @@ public class MasterdataController {
 		}
 	}
 	
-	
-	@PostMapping(value = "/process", produces = "application/json")
-	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
-	public ResponseEntity<APIResponse<Object>>  processAndSendRawDataToSqs(
-			@RequestHeader("Authorization") String authorizationHeader,@RequestHeader("X-File-Name") String fileName) {
-
-		final String activityType = "Process Master Data";
-
-		final HTTPVerb httpMethod = HTTPVerb.POST;
-		String message = "";
-		String endPoint = API_ENDPOINT + "/process";
-		AuditDTO auditDTO = auditService.createAuditDTO(INVALID_USER_ID, activityType, activityTypePrefix, endPoint,
-				httpMethod);
-
-		try {
-			 
-			int processedCount = masterdataService.processAndSendRawDataToSqs(fileName,authorizationHeader);
-			if (processedCount< 1) {
-				message = "No data to process.";
-				auditService.logAudit(auditDTO, 200, message, authorizationHeader);
-				return ResponseEntity.status(HttpStatus.OK).body(APIResponse.error(message));
-				 
-			}
-			message ="Processed and sent " + processedCount + " rows to SQS.";
-			 
-			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(message,"",processedCount));
-		} catch (Exception e) {
-
-			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
-
-			logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
-			auditDTO.setRemarks(e.getMessage());
-			auditService.logAudit(auditDTO, 500, message, authorizationHeader);
-			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
-		}
-	}
-
 
 	@GetMapping(value = "", produces = "application/json")
 	@PreAuthorize("hasAuthority('SCOPE_view:mdm') or hasAuthority('SCOPE_manage:mdm')")
