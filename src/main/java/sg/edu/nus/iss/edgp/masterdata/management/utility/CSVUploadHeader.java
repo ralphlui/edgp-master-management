@@ -1,6 +1,8 @@
 package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -11,6 +13,7 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 
 public class CSVUploadHeader {
 
+	DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 	private final String id;
     private final String fileName;
     private final String domainName;
@@ -22,6 +25,7 @@ public class CSVUploadHeader {
     private final int totalRows;
     private final FileProcessStage processStage;
     private final boolean fileStatus;
+    
 
     public CSVUploadHeader( MasterDataHeader header) {
         this.id = header.getId();
@@ -30,7 +34,7 @@ public class CSVUploadHeader {
         this.policyId = header.getPolicyId();
         this.organizationId = header.getOrganizationId();
         this.uploadedBy = header.getUploadedBy();
-        this.uploadedDate = LocalDateTime.now().toString();
+        this.uploadedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
         this.updatedDate = "";
         this.totalRows = header.getTotalRowsCount();
         this.processStage = header.getProcessStage();

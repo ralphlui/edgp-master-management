@@ -1,5 +1,8 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
 
@@ -79,6 +82,8 @@ public class HeaderService implements IHeaderService {
 
 	@Override
 	public void updateFileStage(String fileId, FileProcessStage processStage) {
+		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    	String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
 
 		Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(fileId).build());
 
@@ -88,7 +93,7 @@ public class HeaderService implements IHeaderService {
 				.expressionAttributeNames(Map.of("#ps", "process_stage"))
 				.expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(processStage.name()).build(),
 						 ":now",
-						AttributeValue.builder().s(java.time.Instant.now().toString()).build()))
+						AttributeValue.builder().s(updatedDate).build()))
 				.conditionExpression("attribute_exists(id)").returnValues(ReturnValue.UPDATED_NEW).build();
 
 		dynamoDbClient.updateItem(req);

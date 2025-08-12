@@ -22,14 +22,14 @@ public class WorkflowObserverScheduler {
 	private final HeaderService headerService;
 	private final MasterdataService masterdataService;
 
-	@Scheduled(fixedDelayString = "PT5M")
+	@Scheduled(fixedDelayString = "PT1M")
 	public void checkWorkflowStatusAndPushNext() {
 		logger.info("Checking workflow status...");
 
 		try {
 			// 1) Get the current PROCESSING file 
 			Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.PROCESSING);
-			if (file.isEmpty()) {
+			if (file== null || file.isEmpty()) {
 				logger.info("No processing files found.");
 			// (2) Push data to Workflow Queue
 				int dispatched = masterdataService.processAndSendRawDataToSqs();

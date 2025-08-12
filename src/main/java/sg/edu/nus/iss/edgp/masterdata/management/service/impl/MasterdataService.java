@@ -1,6 +1,9 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -47,7 +50,7 @@ public class MasterdataService implements IMasterdataService {
 	private final DynamicDetailService dynamoService;
 	private final HeaderService headerService;
 	private final SQSPublishingService sqsPublishingService;
-	private final JSONWriterService stagingWriterService;
+	private final StagingDataService stagingDataService;
 	private final PayloadBuilderService payloadBuilderService;
 	private final JSONReader jsonReader;
 
@@ -87,7 +90,7 @@ public class MasterdataService implements IMasterdataService {
 				dynamoService.createTable(stagingTableName);
 			}
 
-			InsertionSummary summary = stagingWriterService.writeToStaging(stagingTableName, rows,
+			InsertionSummary summary = stagingDataService.insertToStaging(stagingTableName, rows,
 					masterReq.getOrganizationId(), masterReq.getPolicyId(), masterReq.getDomainName(), headerId,
 					uploadedBy);
 
@@ -124,6 +127,27 @@ public class MasterdataService implements IMasterdataService {
 		}
 		return result;
 	}
+	
+	@Override
+	public List<Map<String, Object>> getDataByPolicyAndOrgIdAndDomainName(SearchRequest searchReq) {
+		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+		if (!dynamoService.tableExists(tableName)) {
+			logger.warn("Table {} does not exist.", tableName);
+			return Collections.emptyList();
+		}
+
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+		expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
+		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId()).build());
+		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+				.filterExpression("organization_id = :orgId AND policy_id = :policyId AND domain_name = :domainName")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items());
+	}
 
 	@Override
 	public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
@@ -140,6 +164,46 @@ public class MasterdataService implements IMasterdataService {
 
 		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
 				.filterExpression("organization_id = :orgId AND policy_id = :policyId")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items());
+	}
+	@Override
+	public List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq) {
+
+		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+		if (!dynamoService.tableExists(tableName)) {
+			logger.warn("Table {} does not exist.", tableName);
+			return Collections.emptyList();
+		}
+
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId().trim()).build());
+		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+				.filterExpression("policy_id = :policyId AND domain_name = :domainName")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items());
+	}
+	@Override
+	public List<Map<String, Object>> getDataByOrgIdAndDomainName(SearchRequest searchReq) {
+
+		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+		if (!dynamoService.tableExists(tableName)) {
+			logger.warn("Table {} does not exist.", tableName);
+			return Collections.emptyList();
+		}
+
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+		expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
+		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+				.filterExpression("organization_id = :orgId AND domain_name = :domainName")
 				.expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
@@ -181,6 +245,24 @@ public class MasterdataService implements IMasterdataService {
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
 		return mapItems(response.items());
 	}
+	
+	@Override
+	public List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq) {
+		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
+		if (!dynamoService.tableExists(tableName)) {
+			logger.warn("Table {} does not exist.", tableName);
+			return Collections.emptyList();
+		}
+
+		Map<String, AttributeValue> expressionValues = Map.of(":domainName",
+				AttributeValue.builder().s(searchReq.getDomainName()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+				.filterExpression("domain_name = :domainName").expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items());
+	}
 
 	@Override
 	public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
@@ -201,7 +283,7 @@ public class MasterdataService implements IMasterdataService {
 		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
 		String workflowStatus = DynamoConstants.WORKFLOW_STATUS_TABLE_NAME.trim();
-
+		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 		try {
 
 			// 1) Header lookup
@@ -235,8 +317,8 @@ public class MasterdataService implements IMasterdataService {
 				}
 
 				int processedCount = 0;
-				 
-				String createdDateIso = java.time.LocalDateTime.now().toString();
+				  
+				String createdDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
 
 				for (Map<String, AttributeValue> record : records) {
 					try {
@@ -262,7 +344,7 @@ public class MasterdataService implements IMasterdataService {
 						if (!sqsMessage.isEmpty()) {
 							sqsPublishingService.sendRecordToQueue(sqsMessage);
 							
-							item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
+							item.put("created_date", AttributeValue.builder().s(createdDate).build());
 							item.put("organization_id", AttributeValue.builder().s(organizationId).build());
 							item.put("file_id",AttributeValue.builder().s(fileId).build());
 							item.put("policy_id",AttributeValue.builder().s(policyId).build());

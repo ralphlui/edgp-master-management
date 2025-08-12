@@ -2,7 +2,10 @@ package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
- 
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import org.springframework.stereotype.Service;
@@ -12,11 +15,11 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 
 @RequiredArgsConstructor
 @Service
-public class JSONWriterService {
+public class StagingDataService {
 
 	private final DynamoDbClient dynamoDbClient;
 	
-    public InsertionSummary writeToStaging(
+    public InsertionSummary insertToStaging(
             String stagingTableName,
             List<Map<String, String>> csvRows,
             String organizationId,
@@ -31,11 +34,11 @@ public class JSONWriterService {
 
         final int MAX_BATCH = 25;
         List<WriteRequest> batch = new ArrayList<>(MAX_BATCH);
-
-        String uploadedDate = java.time.LocalDateTime.now().toString();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String uploadedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
 
         for (Map<String, String> src : csvRows) {
-            Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> item = new LinkedHashMap<>();
+            Map<String, AttributeValue> item = new LinkedHashMap<>();
  
             for (var e : src.entrySet()) {
                 var av = toAttributeValue(e.getValue());
@@ -72,20 +75,20 @@ public class JSONWriterService {
     }
 
  
-    private static software.amazon.awssdk.services.dynamodb.model.AttributeValue avS(String s) {
-        return software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().s(s).build();
+    private static AttributeValue avS(String s) {
+        return AttributeValue.builder().s(s).build();
     }
-    private static software.amazon.awssdk.services.dynamodb.model.AttributeValue avN(String n) {
-        return software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().n(n).build();
+    private static AttributeValue avN(String n) {
+        return AttributeValue.builder().n(n).build();
     }
 
-    private static software.amazon.awssdk.services.dynamodb.model.AttributeValue toAttributeValue(String raw) {
-        if (raw == null) return software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().nul(true).build();
+    private static AttributeValue toAttributeValue(String raw) {
+        if (raw == null) return AttributeValue.builder().nul(true).build();
         String s = raw.trim();
-        if (s.isEmpty()) return software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().nul(true).build();
+        if (s.isEmpty()) return AttributeValue.builder().nul(true).build();
 
         if (s.equalsIgnoreCase("true") || s.equalsIgnoreCase("false")) {
-            return software.amazon.awssdk.services.dynamodb.model.AttributeValue.builder().bool(Boolean.parseBoolean(s)).build();
+            return AttributeValue.builder().bool(Boolean.parseBoolean(s)).build();
         }
         if (s.matches("^-?\\d+$") || s.matches("^-?\\d*\\.\\d+$") || s.matches("^-?\\d+(?:[eE]-?\\d+)$")) {
             try { new java.math.BigDecimal(s); return avN(s); } catch (NumberFormatException ignore) {}
@@ -107,7 +110,7 @@ public class JSONWriterService {
     }
 
     
-    private static Map<String, Object> toPlainMap(Map<String, software.amazon.awssdk.services.dynamodb.model.AttributeValue> item) {
+    private static Map<String, Object> toPlainMap(Map<String, AttributeValue> item) {
         Map<String, Object> m = new LinkedHashMap<>();
         for (var e : item.entrySet()) {
             var v = e.getValue();
@@ -121,11 +124,11 @@ public class JSONWriterService {
     }
 
     private static void flushBatch(
-            software.amazon.awssdk.services.dynamodb.DynamoDbClient ddb,
+            DynamoDbClient ddb,
             String table,
-            List<software.amazon.awssdk.services.dynamodb.model.WriteRequest> wrs
+            List<WriteRequest> wrs
     ) {
-        Map<String, List<software.amazon.awssdk.services.dynamodb.model.WriteRequest>> req = new HashMap<>();
+        Map<String, List<WriteRequest>> req = new HashMap<>();
         req.put(table, new ArrayList<>(wrs));
         int attempt = 0;
         while (true) {

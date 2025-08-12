@@ -52,7 +52,7 @@ public class MasterdataControllerTest {
     @Test
     void testGetUploadedData_allData() {
         SearchRequest request = new SearchRequest();
-        request.setCategory("vendor");
+        request.setDomainName("vendor");
 
         List<Map<String, Object>> mockData = List.of(Map.of("id", "1", "name", "Sample"));
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
@@ -69,7 +69,7 @@ public class MasterdataControllerTest {
     @Test
     void testGetUploadedData_byPolicyAndOrgId() {
         SearchRequest request = new SearchRequest();
-        request.setCategory("vendor");
+        request.setDomainName("vendor");
         request.setPolicyId("POL123");
         request.setOrganizationId("ORG456");
 

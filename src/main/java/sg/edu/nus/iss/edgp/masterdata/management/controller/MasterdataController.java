@@ -1,5 +1,6 @@
 package sg.edu.nus.iss.edgp.masterdata.management.controller;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -93,7 +94,7 @@ public class MasterdataController {
 			@RequestHeader("Authorization") String authorizationHeader,
 			@Valid @ModelAttribute SearchRequest searchRequest) {
 
-		final String activityType = "Get All Uploaded Data" + searchRequest.getCategory() + "List";
+		final String activityType = "Get All Uploaded Data" + searchRequest.getDomainName() + "List";
 		final HTTPVerb httpMethod = HTTPVerb.GET;
 		final String endpoint = API_ENDPOINT;
 
@@ -104,22 +105,31 @@ public class MasterdataController {
 			
 		    String policyId = searchRequest.getPolicyId();
 		    String orgId = searchRequest.getOrganizationId();
+		    String domainName = searchRequest.getDomainName();
 
 		    boolean hasPolicyId = policyId != null && !policyId.isBlank();
 		    boolean hasOrgId = orgId != null && !orgId.isBlank();
-		    List<Map<String, Object>> result;
+		    boolean hasDomainName = domainName !=null && !domainName.isBlank();
+		    List<Map<String, Object>> result = new ArrayList<Map<String,Object>>();
 			
-			if (hasPolicyId && hasOrgId) {
+			if (hasPolicyId && hasOrgId && hasDomainName) {
+				result= masterdataService.getDataByPolicyAndOrgIdAndDomainName( searchRequest);
+		    }else if (hasPolicyId && hasOrgId) {
 				result= masterdataService.getDataByPolicyAndOrgId( searchRequest);
-		    } else if (hasPolicyId) {
+		    }else if (hasPolicyId && hasDomainName) {
+				result= masterdataService.getDataByPolicyAndDomainName( searchRequest);
+		    }else if (hasOrgId && hasDomainName) {
+				result= masterdataService.getDataByOrgIdAndDomainName( searchRequest);
+		    }else if (hasPolicyId) {
 		    	result= masterdataService.getDataByPolicyId(searchRequest);
 		    } else if (hasOrgId) {
 		    	result= masterdataService.getDataByOrgId(searchRequest);
-		    } else {
-		    	result= masterdataService.getAllData(searchRequest);
+		    } else if(hasDomainName) {
+		    	result= masterdataService.getDataByDomainName(searchRequest);
 		    }
+		     
 			 
-			String message = result.isEmpty() ? "No data found." : "Successfully retrieved "+searchRequest.getCategory()+" data.";
+			String message = result.isEmpty() ? "No data found." : "Successfully retrieved "+searchRequest.getDomainName()+" data.";
 			auditService.logAudit(auditDTO, 200, message, authorizationHeader);
 
 			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result, message, result.size()));

@@ -10,7 +10,7 @@ import lombok.Setter;
 public class SearchRequest {
 	    
 	    @NotBlank
-	    private String category;
+	    private String domainName;
 
 	    @Min(0)
 	    private int page = 0;

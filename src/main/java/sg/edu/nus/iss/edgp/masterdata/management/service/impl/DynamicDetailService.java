@@ -1,5 +1,8 @@
 package sg.edu.nus.iss.edgp.masterdata.management.service.impl;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +11,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IDynamicDetailService;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeAction;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
@@ -24,6 +28,7 @@ import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
@@ -179,24 +184,25 @@ public class DynamicDetailService implements IDynamicDetailService {
 
 	
     @Override
-	public void updateStagingProcessedStatus(String tableName, String id, String newStatus) {
-	    Map<String, AttributeValue> key = new HashMap<>();
-	    key.put("id", AttributeValue.builder().s(id).build());
+    public void updateStagingProcessedStatus(String tableName, String id, String newStatus) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
 
-	    Map<String, AttributeValueUpdate> updates = new HashMap<>();
-	    updates.put("is_processed", AttributeValueUpdate.builder()
-	        .value(AttributeValue.builder().s(newStatus).build())
-	        .action(AttributeAction.PUT)
-	        .build());
+        Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(id).build());
 
-	    UpdateItemRequest updateRequest = UpdateItemRequest.builder()
-	        .tableName(tableName)
-	        .key(key)
-	        .attributeUpdates(updates)
-	        .build();
+        UpdateItemRequest req = UpdateItemRequest.builder()
+            .tableName(tableName)
+            .key(key)
+            .updateExpression("SET is_processed = :s, updated_date = :ud")
+            .expressionAttributeValues(Map.of(
+                ":s", AttributeValue.builder().s(newStatus).build(),
+                ":ud", AttributeValue.builder().s(updatedDate).build()
+            ))
+            .conditionExpression("attribute_exists(id)")
+            .build();
 
-	    dynamoDbClient.updateItem(updateRequest);
-	}
+        dynamoDbClient.updateItem(req);
+    }
     
     public Map<String, AttributeValue> getDomainNameByFileID(String tableName, String id) {
         try {

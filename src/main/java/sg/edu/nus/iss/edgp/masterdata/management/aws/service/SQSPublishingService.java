@@ -14,7 +14,7 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import software.amazon.awssdk.services.sqs.model.SendMessageResponse;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
+
 
 @RequiredArgsConstructor
 @Service
@@ -104,13 +104,13 @@ public class SQSPublishingService {
 
 	             
 	            if (response.sdkHttpResponse().isSuccessful()) {
-	                System.out.println("Message sent. ID: " + response.messageId());
+	                System.out.println("Raw Data Message sent. ID: " + response.messageId());
 	            } else {
-	                throw new RuntimeException("SQS send failed: " + response.sdkHttpResponse().statusCode());
+	                throw new RuntimeException("Raw Data SQS send failed: " + response.sdkHttpResponse().statusCode());
 	            }
 
 	        } catch (Exception e) {
-	            throw new RuntimeException("Failed to send message to SQS: " + e.getMessage(), e);
+	            throw new RuntimeException("Failed to send Raw Data message to SQS: " + e.getMessage(), e);
 	        }
 	    }
 
