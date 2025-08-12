@@ -47,7 +47,7 @@ public class CSVUploadHeader {
         item.put("policy_id", AttributeValue.builder().s(policyId).build());
         item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
         item.put("uploaded_date", AttributeValue.builder().s(uploadedDate).build());
-        item.put("updatedDate", AttributeValue.builder().s(updatedDate).build());
+        item.put("updated_date", AttributeValue.builder().s(updatedDate).build());
         item.put("total_rows_count", AttributeValue.builder().n(String.valueOf(totalRows)).build());
         item.put("process_stage", AttributeValue.builder().s(String.valueOf(processStage)).build());
         item.put("file_status", AttributeValue.builder().bool(fileStatus).build());

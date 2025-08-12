@@ -12,16 +12,11 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.RuleItems;
-import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
+import sg.edu.nus.iss.edgp.masterdata.management.pojo.*; 
 import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.Metadata;
@@ -100,7 +95,7 @@ public class MasterdataService implements IMasterdataService {
 			int total = summary.totalInserted();
 			List<Map<String, Object>> top50 = summary.previewTop50();
 
-			String message = "Inserted " + total + " rows successfully.";
+			String message = "Uploaded " + total + " rows successfully.";
 			return new UploadResult(message, total, top50);
 
 		} catch (Exception e) {
@@ -251,15 +246,12 @@ public class MasterdataService implements IMasterdataService {
 						String stgID = item.get("id").s();
 
 						item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
-						item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
 						item.put("domain_name", AttributeValue.builder().s(domainName).build());
 
 						// Remove staging-only metadata
 						item.remove("is_processed");
 						item.remove("uploaded_by");
 						item.remove("uploaded_date");
-						 
-						
 						item.remove("organization_id");
 						item.remove("file_id");
 						item.remove("policy_id");
@@ -269,15 +261,18 @@ public class MasterdataService implements IMasterdataService {
 						String sqsMessage = prepareJsonMessage(item, fileId, policyId, domainName, uploadedBy);
 						if (!sqsMessage.isEmpty()) {
 							sqsPublishingService.sendRecordToQueue(sqsMessage);
+							
+							item.put("created_date", AttributeValue.builder().s(createdDateIso).build());
 							item.put("organization_id", AttributeValue.builder().s(organizationId).build());
 							item.put("file_id",AttributeValue.builder().s(fileId).build());
 							item.put("policy_id",AttributeValue.builder().s(policyId).build());
 							item.put("domain_name",AttributeValue.builder().s(domainName).build());
 							item.put("uploaded_by",AttributeValue.builder().s(uploadedBy).build());
-							
+							item.put("final_status", AttributeValue.builder().s("").build());
+							item.put("rule_status", AttributeValue.builder().l(Collections.emptyList()).build());
+
 							// (4) Insert into Workflow Status table
 							dynamoService.insertValidatedMasterData(workflowStatus, item);
-
 
 							// (5) Mark file stage as processig
 							headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);

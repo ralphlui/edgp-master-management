@@ -37,7 +37,6 @@ public class PolicyAPICall {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			responseStr = response.body();
 
-			logger.info("My-policy  response: {}", responseStr);
 
 		} catch (Exception e) {
 			logger.error("Exception is occurred in getRuleByPolicyId ", e);

@@ -37,7 +37,6 @@ public class AdminAPICall {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			responseStr = response.body();
 
-			logger.info("Active user detail response: {}", responseStr);
 
 		} catch (Exception e) {
 			logger.error(GET_SPECIFIC_ACTIVE_USERS_EXCEPTION_MSG, e);
@@ -63,7 +62,6 @@ public class AdminAPICall {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			responseStr = response.body();
 
-			logger.info("Active user detail response: {}", responseStr);
 
 		} catch (Exception e) {
 			logger.error(GET_SPECIFIC_ACTIVE_USERS_EXCEPTION_MSG, e);

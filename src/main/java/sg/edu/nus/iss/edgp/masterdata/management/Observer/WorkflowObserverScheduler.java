@@ -28,7 +28,6 @@ public class WorkflowObserverScheduler {
 
 		try {
 			// 1) Get the current PROCESSING file 
-			
 			Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.PROCESSING);
 			if (file.isEmpty()) {
 				logger.info("No processing files found.");
