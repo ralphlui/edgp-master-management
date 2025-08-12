@@ -47,9 +47,8 @@ public class PayloadBuilderService {
             }
             rn.put("rule_description", r.getRule_description());
         }
-        String s =mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
-        System.out.println(s);
-
-        return s;
+        String payload =mapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+        
+        return payload;
     }
 }

@@ -10,37 +10,45 @@ import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicDetailService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.HeaderService;
-import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;   
+import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 
 @RequiredArgsConstructor
 @Service
 public class WorkflowObserverScheduler {
 
 	private static final Logger logger = LoggerFactory.getLogger(WorkflowObserverScheduler.class);
- 
+
 	private final HeaderService headerService;
 	private final MasterdataService masterdataService;
+	private final DynamicDetailService dynamoService;
 
 	@Scheduled(fixedDelayString = "PT1M")
 	public void checkWorkflowStatusAndPushNext() {
 		logger.info("Checking workflow status...");
 
 		try {
-			// 1) Get the current PROCESSING file 
-			Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.PROCESSING);
-			if (file== null || file.isEmpty()) {
-				logger.info("No processing files found.");
-			// (2) Push data to Workflow Queue
-				int dispatched = masterdataService.processAndSendRawDataToSqs();
-				
-				logger.info("Dispatched {} messages to workflow inbound queue.", dispatched);
-				
-			} else {
-				logger.info("File is not complete yet (status={}). Will check again on next poll.",
-						  FileProcessStage.PROCESSING);
+			if (dynamoService.tableExists(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim()) 
+					&& dynamoService.tableExists(DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim())) {
+				// 1) Get the current PROCESSING file
+				Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.PROCESSING);
+				if (file == null || file.isEmpty()) {
+					logger.info("No processing files found.");
+					// (2) Push data to Workflow Queue
+					int dispatched = masterdataService.processAndSendRawDataToSqs();
+
+					logger.info("Dispatched {} messages to workflow inbound queue.", dispatched);
+
+				} else {
+					logger.info("File is not complete yet (status={}). Will check again on next poll.",
+							FileProcessStage.PROCESSING);
+				}
+			}else {
+				logger.info("No data found to process");
 			}
-			
+
 		} catch (MasterdataServiceException e) {
 
 			logger.error("Domain error during workflow polling/publish.", e);

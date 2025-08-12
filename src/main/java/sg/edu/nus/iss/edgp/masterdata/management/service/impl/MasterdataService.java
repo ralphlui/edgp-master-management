@@ -282,7 +282,7 @@ public class MasterdataService implements IMasterdataService {
 	public int processAndSendRawDataToSqs() {
 		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
 		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
-		String workflowStatus = DynamoConstants.WORKFLOW_STATUS_TABLE_NAME.trim();
+		String mdataTaskTrackerTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
 		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 		try {
 
@@ -312,8 +312,8 @@ public class MasterdataService implements IMasterdataService {
 				List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
 						fileId, policyId, domainName);
 
-				if (!dynamoService.tableExists(workflowStatus)) {
-					dynamoService.createTable(workflowStatus);
+				if (!dynamoService.tableExists(mdataTaskTrackerTable)) {
+					dynamoService.createTable(mdataTaskTrackerTable);
 				}
 
 				int processedCount = 0;
@@ -354,7 +354,7 @@ public class MasterdataService implements IMasterdataService {
 							item.put("rule_status", AttributeValue.builder().l(Collections.emptyList()).build());
 
 							// (4) Insert into Workflow Status table
-							dynamoService.insertValidatedMasterData(workflowStatus, item);
+							dynamoService.insertValidatedMasterData(mdataTaskTrackerTable, item);
 
 							// (5) Mark file stage as processig
 							headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
