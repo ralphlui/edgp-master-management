@@ -3,7 +3,7 @@ FROM openjdk:17
 # Set the working directory to /app
 WORKDIR /app
 # Copy the Spring Boot application JAR file into the Docker image
-COPY target/edgp-master-management-0.0.1-SNAPSHOT.jar /app/edgp-master-management-0.0.1-SNAPSHOT.jar
+COPY target/edgp-masterdata-management-0.0.1-SNAPSHOT.jar /app/edgp-masterdata-management-0.0.1-SNAPSHOT.jar
 # Copy certificate from build context into container
 COPY devplify.crt /tmp/devplify.crt
 #COPY demo.devplify.crt /tmp/demo.devplify.crt
@@ -27,4 +27,4 @@ RUN keytool -importcert \
 # Expose the port that the Spring Boot application is listening on
 EXPOSE 8083
 # Run the Spring Boot application when the container starts
-CMD ["java", "-jar", "edgp-master-management-0.0.1-SNAPSHOT.jar"]
+CMD ["java", "-jar", "edgp-masterdata-management-0.0.1-SNAPSHOT.jar"]
