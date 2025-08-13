@@ -6,6 +6,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
@@ -13,7 +14,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IHeaderService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVUploadHeader;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
@@ -26,6 +26,9 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 @Service
 @RequiredArgsConstructor
 public class HeaderService implements IHeaderService {
+	
+	@Value("${aws.dynamodb.table.master.data.header}")
+	private String headerTableName;
 
 	private final DynamoDbClient dynamoDbClient;
 
@@ -41,7 +44,7 @@ public class HeaderService implements IHeaderService {
 	@Override
 	public Optional<MasterDataHeader> fetchOldestByStage(FileProcessStage stage) {
 	    ScanRequest req = ScanRequest.builder()
-	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
+	        .tableName(headerTableName.trim())
 	        .filterExpression("#ps = :ps")
 	        .expressionAttributeNames(Map.of("#ps", "process_stage"))
 	        .expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(stage.name()).build()))
@@ -88,7 +91,7 @@ public class HeaderService implements IHeaderService {
 		Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(fileId).build());
 
 		UpdateItemRequest req = UpdateItemRequest.builder()
-				.tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim()).key(key)
+				.tableName(headerTableName.trim()).key(key)
 				.updateExpression("SET #ps = :ps, updated_date = :now")
 				.expressionAttributeNames(Map.of("#ps", "process_stage"))
 				.expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(processStage.name()).build(),
@@ -108,7 +111,7 @@ public class HeaderService implements IHeaderService {
 	    }
 
 	    ScanRequest req = ScanRequest.builder()
-	        .tableName(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())
+	        .tableName(headerTableName.trim())
 	        .filterExpression("#fn = :fn")
 	        .expressionAttributeNames(Map.of("#fn", "file_name"))
 	        .expressionAttributeValues(Map.of(":fn", AttributeValue.builder().s(fn).build()))

@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
@@ -13,11 +14,18 @@ import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DynamicDetailService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.HeaderService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.MasterdataService;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
+
 
 @RequiredArgsConstructor
 @Service
 public class WorkflowObserverScheduler {
+	
+	@Value("${aws.dynamodb.table.master.data.header}")
+	private String headerTableName;
+	
+	@Value("${aws.dynamodb.table.master.data.staging}")
+	private String stagingTableName;
+	
 
 	private static final Logger logger = LoggerFactory.getLogger(WorkflowObserverScheduler.class);
 
@@ -30,8 +38,8 @@ public class WorkflowObserverScheduler {
 		logger.info("Checking workflow status...");
 
 		try {
-			if (dynamoService.tableExists(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim()) 
-					&& dynamoService.tableExists(DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim())) {
+			if (dynamoService.tableExists(headerTableName.trim()) 
+					&& dynamoService.tableExists(stagingTableName.trim())) {
 				// 1) Get the current PROCESSING file
 				Optional<MasterDataHeader> file = headerService.fetchOldestByStage(FileProcessStage.PROCESSING);
 				if (file == null || file.isEmpty()) {

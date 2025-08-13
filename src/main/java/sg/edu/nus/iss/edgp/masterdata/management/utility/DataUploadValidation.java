@@ -1,5 +1,6 @@
 package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +15,9 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.HeaderService;
 @RequiredArgsConstructor
 @Component
 public class DataUploadValidation {
+	
+	@Value("${aws.dynamodb.table.master.data.header}")
+	private String masterDataHeader;
 
 	private final JSONReader jsonReader;
 	private final HeaderService headerService;
@@ -34,7 +38,7 @@ public class DataUploadValidation {
 				result.setStatus(HttpStatus.BAD_REQUEST);
 				return result;
 			} else {
-				if (dynamoService.tableExists(DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim())) {
+				if (dynamoService.tableExists(masterDataHeader.trim())) {
 
 					boolean isExists = headerService.filenameExists(fileName.trim());
 					if (isExists) {

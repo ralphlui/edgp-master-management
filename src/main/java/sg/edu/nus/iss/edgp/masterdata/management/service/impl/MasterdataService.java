@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -31,7 +32,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceExce
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -41,6 +41,16 @@ import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 @RequiredArgsConstructor
 @Service
 public class MasterdataService implements IMasterdataService {
+	
+	@Value("${aws.dynamodb.table.master.data.header}")
+	private String headerTableName;
+	
+	@Value("${aws.dynamodb.table.master.data.staging}")
+	private String stagingTableName;
+	
+	@Value("${aws.dynamodb.table.master.data.task.tracker}")
+	private String mdataTaskTrackerTable;
+	
 
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
@@ -80,18 +90,17 @@ public class MasterdataService implements IMasterdataService {
 			header.setTotalRowsCount(rows.size());
 			header.setProcessStage(FileProcessStage.UNPROCESSED);
 
-			String headerTableName = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME;
-			if (!dynamoService.tableExists(headerTableName)) {
-				dynamoService.createTable(headerTableName);
+			if (!dynamoService.tableExists(headerTableName.trim())) {
+				dynamoService.createTable(headerTableName.trim());
 			}
-			headerService.saveHeader(headerTableName, header);
+			headerService.saveHeader(headerTableName.trim(), header);
 
-			String stagingTableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-			if (!dynamoService.tableExists(stagingTableName)) {
-				dynamoService.createTable(stagingTableName);
+			
+			if (!dynamoService.tableExists(stagingTableName.trim())) {
+				dynamoService.createTable(stagingTableName.trim());
 			}
 
-			InsertionSummary summary = stagingDataService.insertToStaging(stagingTableName, rows,
+			InsertionSummary summary = stagingDataService.insertToStaging(stagingTableName.trim(), rows,
 					orgId, masterReq.getPolicyId(), masterReq.getDomainName(), headerId,
 					uploadedBy);
 
@@ -133,9 +142,8 @@ public class MasterdataService implements IMasterdataService {
 	@Override
 	public List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq) {
 
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
+		if (!dynamoService.tableExists(stagingTableName.trim())) {
+			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
@@ -143,7 +151,7 @@ public class MasterdataService implements IMasterdataService {
 		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId().trim()).build());
 		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
 				.filterExpression("policy_id = :policyId AND domain_name = :domainName")
 				.expressionAttributeValues(expressionValues).build();
 
@@ -154,16 +162,16 @@ public class MasterdataService implements IMasterdataService {
 
 	@Override
 	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
+		
+		if (!dynamoService.tableExists(stagingTableName.trim())) {
+			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
 		Map<String, AttributeValue> expressionValues = Map.of(":policyId",
 				AttributeValue.builder().s(searchReq.getPolicyId()).build());
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName).filterExpression("policy_id = :policyId")
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim()).filterExpression("policy_id = :policyId")
 				.expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
@@ -174,16 +182,16 @@ public class MasterdataService implements IMasterdataService {
 	
 	@Override
 	public List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq) {
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
+		
+		if (!dynamoService.tableExists(stagingTableName.trim())) {
+			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
 		Map<String, AttributeValue> expressionValues = Map.of(":domainName",
 				AttributeValue.builder().s(searchReq.getDomainName()).build());
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
 				.filterExpression("domain_name = :domainName").expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
@@ -192,13 +200,13 @@ public class MasterdataService implements IMasterdataService {
 
 	@Override
 	public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
+		 
+		if (!dynamoService.tableExists(stagingTableName.trim())) {
+			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName).build();
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim()).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
 		return mapItems(response.items());
@@ -206,9 +214,7 @@ public class MasterdataService implements IMasterdataService {
 
 	@Override
 	public int processAndSendRawDataToSqs() {
-		String headerTable = DynamoConstants.MASTER_DATA_HEADER_TABLE_NAME.trim();
-		String stagingTable = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME.trim();
-		String mdataTaskTrackerTable = DynamoConstants.MASTER_DATA_TASK_TRACKER_TABLE_NAME.trim();
+		
 		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 		try {
 
@@ -235,11 +241,11 @@ public class MasterdataService implements IMasterdataService {
 				}
 
 				// 2) Unprocessed staging
-				List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTable,
+				List<Map<String, AttributeValue>> records = dynamoService.getUnprocessedRecordsByFileId(stagingTableName.trim(),
 						fileId, policyId, domainName);
 
-				if (!dynamoService.tableExists(mdataTaskTrackerTable)) {
-					dynamoService.createTable(mdataTaskTrackerTable);
+				if (!dynamoService.tableExists(mdataTaskTrackerTable.trim())) {
+					dynamoService.createTable(mdataTaskTrackerTable.trim());
 				}
 
 				int processedCount = 0;
@@ -280,13 +286,13 @@ public class MasterdataService implements IMasterdataService {
 							item.put("rule_status", AttributeValue.builder().l(Collections.emptyList()).build());
 
 							// (4) Insert into Workflow Status table
-							dynamoService.insertValidatedMasterData(mdataTaskTrackerTable, item);
+							dynamoService.insertValidatedMasterData(mdataTaskTrackerTable.trim(), item);
 
 							// (5) Mark file stage as processig
 							headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
 
 							// (6) Mark staging as processed
-							dynamoService.updateStagingProcessedStatus(stagingTable, stgID, "1");
+							dynamoService.updateStagingProcessedStatus(stagingTableName.trim(), stgID, "1");
 
 							processedCount++;
 						}
@@ -297,7 +303,7 @@ public class MasterdataService implements IMasterdataService {
 				}
 				if (processedCount > 0) {
 					if (processedCount == totalCount)
-						dynamoService.updateStagingProcessedStatus(headerTable, fileId, "1");
+						dynamoService.updateStagingProcessedStatus(headerTableName.trim(), fileId, "1");
 				}
 				return processedCount;
 			}

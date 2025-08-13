@@ -6,12 +6,12 @@ import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IDomainService;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.DynamoConstants;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -20,6 +20,10 @@ import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
 @RequiredArgsConstructor
 @Service
 public class DomainService implements IDomainService {
+	
+	@Value("${aws.dynamodb.table.domain}")
+	private String domainTableName;
+	
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
 	private final DynamoDbClient dynamoDbClient;
@@ -30,9 +34,9 @@ public class DomainService implements IDomainService {
 		List<String> retList = new ArrayList<>();
 
 		try {
-			if (dynamoService.tableExists(DynamoConstants.DOMAIN_TABLE_NAME.trim())) {
+			if (dynamoService.tableExists(domainTableName.trim())) {
 
-				ScanRequest scanRequest = ScanRequest.builder().tableName(DynamoConstants.DOMAIN_TABLE_NAME.trim())
+				ScanRequest scanRequest = ScanRequest.builder().tableName(domainTableName.trim())
 						.attributesToGet("name").build();
 
 				ScanResponse response = dynamoDbClient.scan(scanRequest);
