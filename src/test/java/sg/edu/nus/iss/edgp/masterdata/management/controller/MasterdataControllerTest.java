@@ -71,12 +71,11 @@ public class MasterdataControllerTest {
         SearchRequest request = new SearchRequest();
         request.setDomainName("vendor");
         request.setPolicyId("POL123");
-        request.setOrganizationId("ORG456");
+       
 
         List<Map<String, Object>> mockData = List.of(Map.of("id", "1", "name", "Filtered Vendor"));
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.getDataByPolicyAndOrgId(request)).thenReturn(mockData);
-
+        
         ResponseEntity<APIResponse<List<Map<String, Object>>>> response =
                 controller.getUploadedData("Bearer token", request);
 

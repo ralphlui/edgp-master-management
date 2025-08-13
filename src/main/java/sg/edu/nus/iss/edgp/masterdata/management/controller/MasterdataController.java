@@ -104,27 +104,19 @@ public class MasterdataController {
 		try {
 			
 		    String policyId = searchRequest.getPolicyId();
-		    String orgId = searchRequest.getOrganizationId();
+		    
 		    String domainName = searchRequest.getDomainName();
 
 		    boolean hasPolicyId = policyId != null && !policyId.isBlank();
-		    boolean hasOrgId = orgId != null && !orgId.isBlank();
+		   
 		    boolean hasDomainName = domainName !=null && !domainName.isBlank();
 		    List<Map<String, Object>> result = new ArrayList<Map<String,Object>>();
 			
-			if (hasPolicyId && hasOrgId && hasDomainName) {
-				result= masterdataService.getDataByPolicyAndOrgIdAndDomainName( searchRequest);
-		    }else if (hasPolicyId && hasOrgId) {
-				result= masterdataService.getDataByPolicyAndOrgId( searchRequest);
-		    }else if (hasPolicyId && hasDomainName) {
+			if (hasPolicyId  && hasDomainName) {
 				result= masterdataService.getDataByPolicyAndDomainName( searchRequest);
-		    }else if (hasOrgId && hasDomainName) {
-				result= masterdataService.getDataByOrgIdAndDomainName( searchRequest);
-		    }else if (hasPolicyId) {
+		    } else if (hasPolicyId) {
 		    	result= masterdataService.getDataByPolicyId(searchRequest);
-		    } else if (hasOrgId) {
-		    	result= masterdataService.getDataByOrgId(searchRequest);
-		    } else if(hasDomainName) {
+		    }  else if(hasDomainName) {
 		    	result= masterdataService.getDataByDomainName(searchRequest);
 		    }
 		     

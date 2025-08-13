@@ -66,6 +66,7 @@ public class MasterdataService implements IMasterdataService {
 
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+			String orgId = jwtService.extractOrgIdFromToken(jwtToken);
 
 			String fileName = file.getOriginalFilename();
 			String headerId = UUID.randomUUID().toString();
@@ -73,7 +74,7 @@ public class MasterdataService implements IMasterdataService {
 			header.setFileName(fileName);
 			header.setId(headerId);
 			header.setDomainName(masterReq.getDomainName().trim());
-			header.setOrganizationId(masterReq.getOrganizationId().trim());
+			header.setOrganizationId(orgId.trim());
 			header.setPolicyId(masterReq.getPolicyId().trim());
 			header.setUploadedBy(uploadedBy);
 			header.setTotalRowsCount(rows.size());
@@ -91,7 +92,7 @@ public class MasterdataService implements IMasterdataService {
 			}
 
 			InsertionSummary summary = stagingDataService.insertToStaging(stagingTableName, rows,
-					masterReq.getOrganizationId(), masterReq.getPolicyId(), masterReq.getDomainName(), headerId,
+					orgId, masterReq.getPolicyId(), masterReq.getDomainName(), headerId,
 					uploadedBy);
 
 			// Reply to FE with top 50 preview and the total count
@@ -128,47 +129,7 @@ public class MasterdataService implements IMasterdataService {
 		return result;
 	}
 	
-	@Override
-	public List<Map<String, Object>> getDataByPolicyAndOrgIdAndDomainName(SearchRequest searchReq) {
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
-			return Collections.emptyList();
-		}
-
-		Map<String, AttributeValue> expressionValues = new HashMap<>();
-		expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
-		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId()).build());
-		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName()).build());
-
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
-				.filterExpression("organization_id = :orgId AND policy_id = :policyId AND domain_name = :domainName")
-				.expressionAttributeValues(expressionValues).build();
-
-		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
-	}
-
-	@Override
-	public List<Map<String, Object>> getDataByPolicyAndOrgId(SearchRequest searchReq) {
-
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
-			return Collections.emptyList();
-		}
-
-		Map<String, AttributeValue> expressionValues = new HashMap<>();
-		expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
-		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId()).build());
-
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
-				.filterExpression("organization_id = :orgId AND policy_id = :policyId")
-				.expressionAttributeValues(expressionValues).build();
-
-		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
-	}
+	
 	@Override
 	public List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq) {
 
@@ -189,26 +150,7 @@ public class MasterdataService implements IMasterdataService {
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
 		return mapItems(response.items());
 	}
-	@Override
-	public List<Map<String, Object>> getDataByOrgIdAndDomainName(SearchRequest searchReq) {
-
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
-			return Collections.emptyList();
-		}
-
-		Map<String, AttributeValue> expressionValues = new HashMap<>();
-		expressionValues.put(":orgId", AttributeValue.builder().s(searchReq.getOrganizationId()).build());
-		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
-
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
-				.filterExpression("organization_id = :orgId AND domain_name = :domainName")
-				.expressionAttributeValues(expressionValues).build();
-
-		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
-	}
+	
 
 	@Override
 	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
@@ -228,23 +170,7 @@ public class MasterdataService implements IMasterdataService {
 		return mapItems(response.items());
 	}
 
-	@Override
-	public List<Map<String, Object>> getDataByOrgId(SearchRequest searchReq) {
-		String tableName = DynamoConstants.MASTER_DATA_STAGING_TABLE_NAME;
-		if (!dynamoService.tableExists(tableName)) {
-			logger.warn("Table {} does not exist.", tableName);
-			return Collections.emptyList();
-		}
-
-		Map<String, AttributeValue> expressionValues = Map.of(":orgId",
-				AttributeValue.builder().s(searchReq.getOrganizationId()).build());
-
-		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName)
-				.filterExpression("organization_id = :orgId").expressionAttributeValues(expressionValues).build();
-
-		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
-	}
+	
 	
 	@Override
 	public List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq) {

@@ -7,7 +7,6 @@ import lombok.Setter;
 @Getter
 public class UploadRequest {
 	
-	private String organizationId="";
 	private String policyId="";
 	private String domainName="";
 	

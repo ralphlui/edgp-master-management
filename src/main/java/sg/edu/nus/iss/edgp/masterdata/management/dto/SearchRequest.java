@@ -19,5 +19,4 @@ public class SearchRequest {
 	    private int size = 50;
 
 	    private String policyId;
-	    private String organizationId;
 }

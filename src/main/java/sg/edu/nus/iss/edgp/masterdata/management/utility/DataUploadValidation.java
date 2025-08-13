@@ -60,12 +60,7 @@ public class DataUploadValidation {
 				result.setStatus(HttpStatus.BAD_REQUEST);
 				return result;
 			}
-			if (uploadReq.getOrganizationId().isEmpty() || uploadReq.getOrganizationId() == null) {
-				result.setValid(false);
-				result.setMessage("Organization is required.");
-				result.setStatus(HttpStatus.BAD_REQUEST);
-				return result;
-			}
+			
 			if (uploadReq.getPolicyId().isEmpty() || uploadReq.getPolicyId() == null) {
 				result.setValid(false);
 				result.setMessage("Policy is required.");
