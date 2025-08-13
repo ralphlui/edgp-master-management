@@ -24,7 +24,7 @@ public class CSVUploadHeader {
     private final String updatedDate;
     private final int totalRows;
     private final FileProcessStage processStage;
-    private final boolean fileStatus;
+    private final String fileStatus;
     
 
     public CSVUploadHeader( MasterDataHeader header) {
@@ -38,7 +38,7 @@ public class CSVUploadHeader {
         this.updatedDate = "";
         this.totalRows = header.getTotalRowsCount();
         this.processStage = header.getProcessStage();
-        this.fileStatus = header.isFileStatus();
+        this.fileStatus = header.getFileStatus();
         
     }
 
@@ -54,7 +54,7 @@ public class CSVUploadHeader {
         item.put("updated_date", AttributeValue.builder().s(updatedDate).build());
         item.put("total_rows_count", AttributeValue.builder().n(String.valueOf(totalRows)).build());
         item.put("process_stage", AttributeValue.builder().s(String.valueOf(processStage)).build());
-        item.put("file_status", AttributeValue.builder().bool(fileStatus).build());
+        item.put("file_status", AttributeValue.builder().s(fileStatus).build());
         
         return item;
     }

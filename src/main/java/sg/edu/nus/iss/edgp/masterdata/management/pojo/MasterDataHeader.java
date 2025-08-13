@@ -18,6 +18,6 @@ public class MasterDataHeader {
 	private String updated_date="";
 	private String uploadedBy="";
 	private FileProcessStage processStage = FileProcessStage.UNPROCESSED;
-	private boolean fileStatus=false;
+	private String fileStatus="";
 	
 }
