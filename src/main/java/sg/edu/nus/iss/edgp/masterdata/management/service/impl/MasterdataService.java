@@ -117,7 +117,7 @@ public class MasterdataService implements IMasterdataService {
 		}
 	}
 
-	private List<Map<String, Object>> mapItems(List<Map<String, AttributeValue>> items) {
+	private List<Map<String, Object>> mapItemsBK(List<Map<String, AttributeValue>> items) {
 		List<Map<String, Object>> result = new ArrayList<>();
 		for (Map<String, AttributeValue> item : items) {
 			Map<String, Object> row = new HashMap<>();
@@ -138,78 +138,207 @@ public class MasterdataService implements IMasterdataService {
 		return result;
 	}
 	
+	private List<Map<String, Object>> mapItems(List<Map<String, AttributeValue>> items , String authorizationHeader) {
+		
+		List<Map<String, Object>> result = new ArrayList<>();
+
+	    for (Map<String, AttributeValue> item : items) {
+	        Map<String, Object> row = new HashMap<>();
+ 
+	        item.forEach((key, value) -> {
+	            if (value.s() != null) {
+	                row.put(key, value.s());
+	            } else if (value.n() != null) {
+	                row.put(key, new BigDecimal(value.n()));
+	            } else if (value.bool() != null) {
+	                row.put(key, value.bool());
+	            } else if (value.hasL()) {
+	                row.put(key, value.l());
+	            } else if (value.hasM()) {
+	                row.put(key, value.m());
+	            }
+	        });
+	        
+	        row.remove("is_processed");
+	        
+	        String fileStatus = asStringAndRemove(row,"file_status");
+	        if (fileStatus =="") {
+	        	 String processStage = asString(row.get("process_stage"));
+	        	 if(processStage.equals(FileProcessStage.UNPROCESSED.toString())) {
+	        		 fileStatus = FileProcessStage.UNPROCESSED.toString();
+	        	 }else if (processStage.equals(FileProcessStage.PROCESSING.toString())) {
+	        		 fileStatus = FileProcessStage.PROCESSING.toString();
+	        	 }else {
+	        		 fileStatus = "";
+	        	 }
+	        	 row.put("file_status", fileStatus);
+	        }  
+	        
+
+	        
+	        String policyId = asStringAndRemove(row, "policy_id");
+	       
+	      
+	        if (policyId != null && !policyId.isBlank()) {
+	        	
+	        	PolicyRoot policyRoot = jsonReader.getValidationRules(policyId,authorizationHeader);
+	        	if(policyRoot!=null) {
+	            Map<String, Object> policy = new HashMap<>();
+	            policy.put("id", policyId);
+	            policy.put("name", policyRoot.getData().getPolicyName());
+	            row.put("policy", policy);
+	        	}
+	        }
+
+	         
+	        String orgId = asStringAndRemove(row, "organization_id");
+	         
+	        if (orgId != null && !orgId.isBlank()) {
+	        	String orgName = jsonReader.getOrganizationName(orgId, authorizationHeader);
+	        	
+	            Map<String, Object> organization = new HashMap<>();
+	            organization.put("id", orgId);
+	            organization.put("name", orgName);
+	            row.put("organization", organization);
+	        }
+
+	        
+	        result.add(row);
+	    }
+	    return result;
+	}
+
+	// --- helpers ---
+	private static String asStringAndRemove(Map<String, Object> map, String key) {
+	    Object v = map.remove(key);
+	    return (v == null) ? null : String.valueOf(v);
+	}
+
+	private static String firstNonEmpty(String a, String b) {
+	    return (a != null && !a.isBlank()) ? a : b;
+	}
+
+	
 	
 	@Override
-	public List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq) {
+	public List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq,String authorizationHeader) {
 
 		if (!dynamoService.tableExists(stagingTableName.trim())) {
 			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
+		
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+		
 
 		Map<String, AttributeValue> expressionValues = new HashMap<>();
 		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId().trim()).build());
 		expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
+		expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy.trim()).build());
 
 		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
-				.filterExpression("policy_id = :policyId AND domain_name = :domainName")
+				.filterExpression("policy_id = :policyId AND domain_name = :domainName AND uploaded_by = :uploaded_by")
 				.expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
+		return mapItems(response.items(),authorizationHeader);
 	}
 	
 
 	@Override
-	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq) {
+	public List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq ,String authorizationHeader ) {
 		
 		if (!dynamoService.tableExists(stagingTableName.trim())) {
 			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
-		Map<String, AttributeValue> expressionValues = Map.of(":policyId",
-				AttributeValue.builder().s(searchReq.getPolicyId()).build());
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+		
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim()).filterExpression("policy_id = :policyId")
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+		expressionValues.put(":policyId", AttributeValue.builder().s(searchReq.getPolicyId().trim()).build());
+		expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy.trim()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
+				.filterExpression("policy_id = :policyId AND uploaded_by = :uploaded_by")
 				.expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
+		return mapItems(response.items(),authorizationHeader);
 	}
 
 	
 	
 	@Override
-	public List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq) {
+	public List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq, String authorizationHeader) {
 		
 		if (!dynamoService.tableExists(stagingTableName.trim())) {
 			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
-
-		Map<String, AttributeValue> expressionValues = Map.of(":domainName",
-				AttributeValue.builder().s(searchReq.getDomainName()).build());
-
-		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
-				.filterExpression("domain_name = :domainName").expressionAttributeValues(expressionValues).build();
-
-		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
-	}
-
-	@Override
-	public List<Map<String, Object>> getAllData(SearchRequest searchReq) {
+		
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
 		 
+
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+			expressionValues.put(":domainName", AttributeValue.builder().s(searchReq.getDomainName().trim()).build());
+		expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy.trim()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
+				.filterExpression("domain_name = :domainName AND uploaded_by = :uploaded_by")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items(),authorizationHeader);
+	}
+	
+	@Override
+	public List<Map<String, Object>> getDataByFileId(SearchRequest searchReq, String authorizationHeader) {
+		
+		if (!dynamoService.tableExists(stagingTableName.trim())) {
+			logger.warn("Table {} does not exist.", stagingTableName.trim());
+			return Collections.emptyList();
+		}
+		
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+		 
+
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+			expressionValues.put(":file_id", AttributeValue.builder().s(searchReq.getFileId().trim()).build());
+		expressionValues.put(":uploaded_by", AttributeValue.builder().s(uploadedBy.trim()).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim())
+				.filterExpression("file_id = :file_id AND uploaded_by = :uploaded_by")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+		return mapItems(response.items(),authorizationHeader);
+	}
+
+	@Override
+	public List<Map<String, Object>> getAllData(String authorizationHeader ) {
+		 
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+		
 		if (!dynamoService.tableExists(stagingTableName.trim())) {
 			logger.warn("Table {} does not exist.", stagingTableName.trim());
 			return Collections.emptyList();
 		}
 
-		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim()).build();
+		Map<String, AttributeValue> expressionValues = Map.of(":uploaded_by",
+				AttributeValue.builder().s(uploadedBy).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(stagingTableName.trim()).filterExpression("uploaded_by = :uploaded_by")
+				.expressionAttributeValues(expressionValues).build();
 
 		ScanResponse response = dynamoDbClient.scan(scanRequest);
-		return mapItems(response.items());
+		return mapItems(response.items(),authorizationHeader);
 	}
 
 	@Override
@@ -397,4 +526,38 @@ public class MasterdataService implements IMasterdataService {
 
 	}
 
+	@Override
+	public List<Map<String, Object>> getAllUploadFiles(  String authorizationHeader) {
+		 
+		String jwtToken = authorizationHeader.substring(7);
+		String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
+		
+		if (!dynamoService.tableExists(headerTableName.trim())) {
+			logger.warn("Table {} does not exist.", headerTableName.trim());
+			return Collections.emptyList();
+		}
+
+		Map<String, AttributeValue> expressionValues = Map.of(":uploaded_by",
+				AttributeValue.builder().s(uploadedBy).build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(headerTableName.trim()).filterExpression("uploaded_by = :uploaded_by")
+				.expressionAttributeValues(expressionValues).build();
+
+		ScanResponse response = dynamoDbClient.scan(scanRequest);
+	
+		
+		return mapItems(response.items(),authorizationHeader); 
+	}
+	
+	private static String asString(Object o) {
+	    return (o == null) ? null : String.valueOf(o);
+	}
+
+	private static boolean isBlank(String s) {
+	    return s == null || s.trim().isEmpty();
+	}
+
+	
+
+	 
 }

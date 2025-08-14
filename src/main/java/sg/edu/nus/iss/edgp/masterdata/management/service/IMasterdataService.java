@@ -13,13 +13,18 @@ public interface IMasterdataService {
 
 	UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest uploadRequest, String authorizationHeader);
 
-	List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq);
-	 
-	List<Map<String, Object>> getAllData(SearchRequest searchReq);
-
-	List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq);
+	List<Map<String, Object>> getAllUploadFiles(String authorizationHeader );
 	
-	List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq);
+	List<Map<String, Object>> getDataByPolicyAndDomainName(SearchRequest searchReq,String authorizationHeader );
+	 
+	List<Map<String, Object>> getAllData(String authorizationHeader);
+
+	List<Map<String, Object>> getDataByPolicyId(SearchRequest searchReq,String authorizationHeader);
+	
+	List<Map<String, Object>> getDataByDomainName(SearchRequest searchReq,String authorizationHeader);
+	
+	List<Map<String, Object>> getDataByFileId(SearchRequest searchReq, String authorizationHeader) ;
 	
 	int processAndSendRawDataToSqs();
+
 }

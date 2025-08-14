@@ -9,8 +9,8 @@ import lombok.Setter;
 @Setter
 public class SearchRequest {
 	    
-	    @NotBlank
-	    private String domainName;
+	
+	    private String domainName="";
 
 	    @Min(0)
 	    private int page = 0;
@@ -18,5 +18,7 @@ public class SearchRequest {
 	    @Min(1)
 	    private int size = 50;
 
-	    private String policyId;
+	    private String policyId="";
+	    
+	    private String fileId="";
 }

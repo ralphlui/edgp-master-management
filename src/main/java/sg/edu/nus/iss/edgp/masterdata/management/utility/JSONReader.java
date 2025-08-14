@@ -2,6 +2,9 @@ package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Map;
+
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
@@ -21,6 +24,7 @@ public class JSONReader {
 
 	private final AdminAPICall adminAPICall;
 	private final PolicyAPICall policyAPICall;
+	private final OrganizationAPICall orgAPICall;
 	private final JSONDataMapper mapper;
 
 	private static final Logger logger = LoggerFactory.getLogger(JSONReader.class);
@@ -100,5 +104,27 @@ public class JSONReader {
 
 		}
 		return "";
+	}
+	
+	public String getOrganizationName(String orgId, String authorizationHeader) {
+		String organizationName ="";
+		
+		String responseStr = orgAPICall.validateActiveOrganization(orgId, authorizationHeader);
+		try {
+			if (responseStr != null && !responseStr.isEmpty()) {
+				ObjectMapper mapper = new ObjectMapper();
+				 
+				Map<String, Object> responseMap = mapper.readValue(responseStr, Map.class);
+				Map<String, Object> dataMap = (Map<String, Object>) responseMap.get("data");
+				organizationName = (String) dataMap.get("organizationName"); 
+			}
+		} catch (Exception e) {
+			logger.error("Error parsing JSON response for getOrganizationName...", e);
+
+		}
+		
+		return organizationName;
+
+
 	}
 }
