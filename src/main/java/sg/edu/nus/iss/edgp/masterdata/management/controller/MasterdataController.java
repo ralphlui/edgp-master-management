@@ -103,25 +103,70 @@ public class MasterdataController {
 
 		try {
 			
-		    String policyId = searchRequest.getPolicyId();
+		    String policyId = searchRequest.getPolicyId().trim();
 		    
-		    String domainName = searchRequest.getDomainName();
-
+		    String domainName = searchRequest.getDomainName().trim();
+		    
+		    String fileId = searchRequest.getFileId().trim();
+		    
+		     
 		    boolean hasPolicyId = policyId != null && !policyId.isBlank();
 		   
 		    boolean hasDomainName = domainName !=null && !domainName.isBlank();
+		    
+		    boolean hasfileId = fileId !=null && !fileId.isBlank();
+		    
 		    List<Map<String, Object>> result = new ArrayList<Map<String,Object>>();
 			
 			if (hasPolicyId  && hasDomainName) {
-				result= masterdataService.getDataByPolicyAndDomainName( searchRequest);
+				result= masterdataService.getDataByPolicyAndDomainName( searchRequest,authorizationHeader);
 		    } else if (hasPolicyId) {
-		    	result= masterdataService.getDataByPolicyId(searchRequest);
+		    	result= masterdataService.getDataByPolicyId(searchRequest,authorizationHeader);
 		    }  else if(hasDomainName) {
-		    	result= masterdataService.getDataByDomainName(searchRequest);
+		    	result= masterdataService.getDataByDomainName(searchRequest,authorizationHeader);
+		    }  else if(hasfileId) {
+		    	result= masterdataService.getDataByFileId(searchRequest,authorizationHeader);
+		    } else {
+		    	result= masterdataService.getAllData(authorizationHeader);
 		    }
 		     
 			 
 			String message = result.isEmpty() ? "No data found." : "Successfully retrieved "+searchRequest.getDomainName()+" data.";
+			auditService.logAudit(auditDTO, 200, message, authorizationHeader);
+
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result, message, result.size()));
+
+		} catch (Exception e) {
+			String errorMessage = (e instanceof MasterdataServiceException) ? e.getMessage()
+					: UNEXPECTED_ERROR;
+
+			logger.error(LOG_MESSAGE_FORMAT, errorMessage, e.getMessage());
+			auditDTO.setRemarks(e.getMessage());
+			auditService.logAudit(auditDTO, 500, errorMessage, authorizationHeader);
+
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(errorMessage));
+		}
+	}
+	
+	@GetMapping(value = "/file", produces = "application/json")
+	@PreAuthorize("hasAuthority('SCOPE_view:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	public ResponseEntity<APIResponse<List<Map<String, Object>>>> getUploadedFile(
+			@RequestHeader("Authorization") String authorizationHeader) {
+
+		final String activityType = "Get All Uploaded File List";
+		final HTTPVerb httpMethod = HTTPVerb.GET;
+		final String endpoint = API_ENDPOINT;
+
+		AuditDTO auditDTO = auditService.createAuditDTO(INVALID_USER_ID, activityType, activityTypePrefix, endpoint,
+				httpMethod);
+
+		try {
+			    
+		    List<Map<String, Object>> result = new ArrayList<Map<String,Object>>();
+				 
+		    result= masterdataService.getAllUploadFiles(authorizationHeader);
+		    
+			String message = result.isEmpty() ? "No data found." : "Successfully retrieved files.";
 			auditService.logAudit(auditDTO, 200, message, authorizationHeader);
 
 			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result, message, result.size()));

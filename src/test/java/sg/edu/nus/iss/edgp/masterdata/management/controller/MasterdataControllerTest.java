@@ -56,7 +56,7 @@ public class MasterdataControllerTest {
 
         List<Map<String, Object>> mockData = List.of(Map.of("id", "1", "name", "Sample"));
         when(auditService.createAuditDTO(any(), any(), any(), any(), any())).thenReturn(auditDTO);
-        when(masterdataService.getAllData(request)).thenReturn(mockData);
+        when(masterdataService.getAllData("11")).thenReturn(mockData);
 
         ResponseEntity<APIResponse<List<Map<String, Object>>>> response =
                 controller.getUploadedData("Bearer token", request);
