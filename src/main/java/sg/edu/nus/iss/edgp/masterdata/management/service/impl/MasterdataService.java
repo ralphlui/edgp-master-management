@@ -412,7 +412,7 @@ public class MasterdataService implements IMasterdataService {
 							item.put("domain_name",AttributeValue.builder().s(domainName).build());
 							item.put("uploaded_by",AttributeValue.builder().s(uploadedBy).build());
 							item.put("final_status", AttributeValue.builder().s("").build());
-							item.put("rule_status", AttributeValue.builder().l(Collections.emptyList()).build());
+							item.put("rule_status", AttributeValue.builder().s("").build());
 
 							// (4) Insert into Workflow Status table
 							dynamoService.insertValidatedMasterData(mdataTaskTrackerTable.trim(), item);
