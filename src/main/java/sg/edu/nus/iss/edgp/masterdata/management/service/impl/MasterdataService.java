@@ -413,6 +413,7 @@ public class MasterdataService implements IMasterdataService {
 							item.put("uploaded_by",AttributeValue.builder().s(uploadedBy).build());
 							item.put("final_status", AttributeValue.builder().s("").build());
 							item.put("rule_status", AttributeValue.builder().s("").build());
+							item.put("failed_validations", AttributeValue.builder().l(Collections.emptyList()).build());
 
 							// (4) Insert into Workflow Status table
 							dynamoService.insertValidatedMasterData(mdataTaskTrackerTable.trim(), item);
@@ -555,6 +556,12 @@ public class MasterdataService implements IMasterdataService {
 
 	private static boolean isBlank(String s) {
 	    return s == null || s.trim().isEmpty();
+	}
+
+	@Override
+	public void updateData(UploadRequest uploadRequest, String authorizationHeader) {
+		// TODO Auto-generated method stub
+		
 	}
 
 	
