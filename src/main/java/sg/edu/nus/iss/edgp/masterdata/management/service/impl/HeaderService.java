@@ -48,7 +48,7 @@ public class HeaderService implements IHeaderService {
 	        .filterExpression("#ps = :ps")
 	        .expressionAttributeNames(Map.of("#ps", "process_stage"))
 	        .expressionAttributeValues(Map.of(":ps", AttributeValue.builder().s(stage.name()).build()))
-	        .projectionExpression("id, domain_name, organization_id, policy_id,uploaded_by, uploaded_date,total_rows_count")
+	        .projectionExpression("id, domain_name, organization_id, policy_id, uploaded_by, uploaded_date, total_rows_count")
 	        .build();
 
 	    Map<String, AttributeValue> resultItem = null;
@@ -56,14 +56,14 @@ public class HeaderService implements IHeaderService {
 
 	    for (ScanResponse page : dynamoDbClient.scanPaginator(req)) {
 	        for (Map<String, AttributeValue> item : page.items()) {
-	            AttributeValue idAttr  = item.get("id");
-	            AttributeValue upAttr  = item.get("uploaded_date");
+	            AttributeValue idAttr = item.get("id");
+	            AttributeValue upAttr = item.get("uploaded_date");
 	            if (idAttr == null || upAttr == null || idAttr.s() == null || upAttr.s() == null) continue;
 
 	            String uploaded = upAttr.s();
 	            if (resultUploaded == null || uploaded.compareTo(resultUploaded) < 0) {
-	            	resultUploaded = uploaded;
-	            	resultItem = item;
+	                resultUploaded = uploaded;
+	                resultItem = item;
 	            }
 	        }
 	    }
@@ -80,6 +80,7 @@ public class HeaderService implements IHeaderService {
 
 	    return Optional.of(header);
 	}
+
 
  
 
