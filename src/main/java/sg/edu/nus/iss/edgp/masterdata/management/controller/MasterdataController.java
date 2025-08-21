@@ -49,7 +49,8 @@ public class MasterdataController {
 	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>>  uploadAndInsertCsvData(
 			@RequestHeader("Authorization") String authorizationHeader,
-			@RequestPart("UploadRequest") UploadRequest uploadReq, @RequestParam("file") MultipartFile file) {
+			@RequestPart("UploadRequest") UploadRequest uploadReq, 
+			@RequestParam("file") MultipartFile file) {
 
 		final String activityType = "Upload Master Data";
 
@@ -182,5 +183,7 @@ public class MasterdataController {
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(errorMessage));
 		}
 	}
+	
+	
 
 }

@@ -26,5 +26,7 @@ public interface IMasterdataService {
 	List<Map<String, Object>> getDataByFileId(SearchRequest searchReq, String authorizationHeader) ;
 	
 	int processAndSendRawDataToSqs();
+	
+	void updateData(UploadRequest uploadRequest,String authorizationHeader);
 
 }
