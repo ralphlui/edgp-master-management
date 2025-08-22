@@ -49,6 +49,11 @@ spec:
                 configMapKeyRef:
                   name: my-configmap
                   key: POLICY_URL
+            - name: ORGANIZATION_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: my-configmap
+                  key: ORGANIZATION_URL
             - name: WORKFLOW_INGESTION_SQS_URL
               valueFrom:
                 configMapKeyRef:
