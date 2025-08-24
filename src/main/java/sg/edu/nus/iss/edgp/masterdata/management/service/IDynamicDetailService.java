@@ -15,6 +15,11 @@ public interface IDynamicDetailService {
 	
 	void insertValidatedMasterData(String tableName, Map<String, AttributeValue> rowData);
 	
+	boolean claimStagingRow(String table, String stgId);
+	
+	void markProcessed(String table, String stgId);
+	
+	void revertClaim(String table, String stgId);
 	
 	void updateStagingProcessedStatus(String tableName, String id, String newStatus);
 	
