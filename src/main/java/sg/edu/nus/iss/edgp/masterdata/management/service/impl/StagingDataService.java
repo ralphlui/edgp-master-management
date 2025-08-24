@@ -53,6 +53,7 @@ public class StagingDataService {
             item.put("uploaded_by", avS(uploadedBy));
             item.put("uploaded_date", avS(uploadedDate));
             item.put("is_processed", avN("0"));
+            item.put("is_handled", avN("0"));
 
            
             if (top50Preview.size() < 50) {

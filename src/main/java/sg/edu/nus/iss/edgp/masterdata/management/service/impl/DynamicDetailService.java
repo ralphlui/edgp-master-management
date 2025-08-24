@@ -27,193 +27,254 @@ import software.amazon.awssdk.services.dynamodb.model.PutItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.ResourceNotFoundException;
 import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
+import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.Select;
 import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
 
 @RequiredArgsConstructor
 @Service
 public class DynamicDetailService implements IDynamicDetailService {
-	
+
 	private final DynamoDbClient dynamoDbClient;
-	
+
 	@Override
-	public void insertStagingMasterData(String tableName,Map<String, String> rawData) {
-	    if (rawData == null || rawData.isEmpty()) {
-	        throw new IllegalArgumentException("No data provided for insert.");
-	    }
-	    
-	   
-	    Map<String, AttributeValue> item = new HashMap<>();
+	public void insertStagingMasterData(String tableName, Map<String, String> rawData) {
+		if (rawData == null || rawData.isEmpty()) {
+			throw new IllegalArgumentException("No data provided for insert.");
+		}
 
-	    if (!rawData.containsKey("id")) {
-	        item.put("id", AttributeValue.builder().s(UUID.randomUUID().toString()).build());
-	    } else {
-	        item.put("id", AttributeValue.builder().s(rawData.get("id")).build());
-	    }
+		Map<String, AttributeValue> item = new HashMap<>();
 
-	    for (Map.Entry<String, String> entry : rawData.entrySet()) {
-	        String column = entry.getKey().toLowerCase().trim();
-	        String value = entry.getValue();
-	        
-	        if (column == null || column.trim().isEmpty()) continue;
+		if (!rawData.containsKey("id")) {
+			item.put("id", AttributeValue.builder().s(UUID.randomUUID().toString()).build());
+		} else {
+			item.put("id", AttributeValue.builder().s(rawData.get("id")).build());
+		}
 
-	        AttributeValue attrVal = convertToAttributeValue(value);
-	        item.put(column, attrVal);
-	    }
+		for (Map.Entry<String, String> entry : rawData.entrySet()) {
+			String column = entry.getKey().toLowerCase().trim();
+			String value = entry.getValue();
 
-	    PutItemRequest request = PutItemRequest.builder()
-	            .tableName(tableName)
-	            .item(item)
-	            .build();
+			if (column == null || column.trim().isEmpty())
+				continue;
 
-	    dynamoDbClient.putItem(request);
+			AttributeValue attrVal = convertToAttributeValue(value);
+			item.put(column, attrVal);
+		}
+
+		PutItemRequest request = PutItemRequest.builder().tableName(tableName).item(item).build();
+
+		dynamoDbClient.putItem(request);
 	}
-	
+
 	private AttributeValue convertToAttributeValue(String value) {
-	    if (value == null || value.trim().isEmpty()) {
-	        return AttributeValue.builder().nul(true).build();
-	    }
+		if (value == null || value.trim().isEmpty()) {
+			return AttributeValue.builder().nul(true).build();
+		}
 
-	    String trimmed = value.trim();
+		String trimmed = value.trim();
 
-	    try {
-	        // Numeric detection
-	        if (trimmed.matches("-?\\d+")) {
-	            return AttributeValue.builder().n(trimmed).build(); // integer
-	        } else if (trimmed.matches("-?\\d+\\.\\d+")) {
-	            return AttributeValue.builder().n(trimmed).build(); // decimal
-	        } else if (trimmed.equalsIgnoreCase("true") || trimmed.equalsIgnoreCase("false")) {
-	            return AttributeValue.builder().bool(Boolean.parseBoolean(trimmed)).build();
-	        } else {
-	            return AttributeValue.builder().s(trimmed).build(); // default to string
-	        }
-	    } catch (Exception e) {
-	        return AttributeValue.builder().s(trimmed).build(); // fallback
-	    }
+		try {
+			// Numeric detection
+			if (trimmed.matches("-?\\d+")) {
+				return AttributeValue.builder().n(trimmed).build(); // integer
+			} else if (trimmed.matches("-?\\d+\\.\\d+")) {
+				return AttributeValue.builder().n(trimmed).build(); // decimal
+			} else if (trimmed.equalsIgnoreCase("true") || trimmed.equalsIgnoreCase("false")) {
+				return AttributeValue.builder().bool(Boolean.parseBoolean(trimmed)).build();
+			} else {
+				return AttributeValue.builder().s(trimmed).build(); // default to string
+			}
+		} catch (Exception e) {
+			return AttributeValue.builder().s(trimmed).build(); // fallback
+		}
 	}
-	
-	@Override
-	 public boolean tableExists(String tableName) {
-	        try {
-	            dynamoDbClient.describeTable(DescribeTableRequest.builder()
-	                    .tableName(tableName).build());
-	            return true;
-	        } catch (ResourceNotFoundException e) {
-	            return false;
-	        }
-	    }
 
-	
+	@Override
+	public boolean tableExists(String tableName) {
+		try {
+			dynamoDbClient.describeTable(DescribeTableRequest.builder().tableName(tableName).build());
+			return true;
+		} catch (ResourceNotFoundException e) {
+			return false;
+		}
+	}
+
 	@Override
 	public void createTable(String tableName) {
-        CreateTableRequest request = CreateTableRequest.builder()
-                .tableName(tableName)
-                .keySchema(KeySchemaElement.builder()
-                        .attributeName("id")
-                        .keyType(KeyType.HASH)
-                        .build())
-                .attributeDefinitions(AttributeDefinition.builder()
-                        .attributeName("id")
-                        .attributeType(ScalarAttributeType.S)
-                        .build())
-                .billingMode(BillingMode.PAY_PER_REQUEST)
-                .build();
+		CreateTableRequest request = CreateTableRequest.builder().tableName(tableName)
+				.keySchema(KeySchemaElement.builder().attributeName("id").keyType(KeyType.HASH).build())
+				.attributeDefinitions(
+						AttributeDefinition.builder().attributeName("id").attributeType(ScalarAttributeType.S).build())
+				.billingMode(BillingMode.PAY_PER_REQUEST).build();
 
-        dynamoDbClient.createTable(request);
-        // Wait until table is ACTIVE
-        waitForTableToBecomeActive(tableName);
-    }
-	
-	private void waitForTableToBecomeActive(String tableName) {
-	    while (true) {
-	        DescribeTableResponse response = dynamoDbClient.describeTable(DescribeTableRequest.builder()
-	                .tableName(tableName)
-	                .build());
-
-	        String status = response.table().tableStatusAsString();
-	        if ("ACTIVE".equalsIgnoreCase(status)) break;
-
-	        try {
-	            Thread.sleep(1000); // Wait 1 sec before checking again
-	        } catch (InterruptedException e) {
-	            Thread.currentThread().interrupt();
-	            throw new RuntimeException("Interrupted while waiting for DynamoDB table to become active");
-	        }
-	    }
+		dynamoDbClient.createTable(request);
+		// Wait until table is ACTIVE
+		waitForTableToBecomeActive(tableName);
 	}
-	
+
+	private void waitForTableToBecomeActive(String tableName) {
+		while (true) {
+			DescribeTableResponse response = dynamoDbClient
+					.describeTable(DescribeTableRequest.builder().tableName(tableName).build());
+
+			String status = response.table().tableStatusAsString();
+			if ("ACTIVE".equalsIgnoreCase(status))
+				break;
+
+			try {
+				Thread.sleep(1000); // Wait 1 sec before checking again
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new RuntimeException("Interrupted while waiting for DynamoDB table to become active");
+			}
+		}
+	}
+
 	@Override
 	public void insertValidatedMasterData(String tableName, Map<String, AttributeValue> rowData) {
-	    if (rowData == null || rowData.isEmpty()) return;
+		if (rowData == null || rowData.isEmpty())
+			return;
 
-	    PutItemRequest request = PutItemRequest.builder()
-	        .tableName(tableName)
-	        .item(rowData) 
-	        .build();
+		PutItemRequest request = PutItemRequest.builder().tableName(tableName).item(rowData).build();
 
-	    dynamoDbClient.putItem(request);
+		dynamoDbClient.putItem(request);
 	}
 
+	@Override
+	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName, String fileId,
+			String policyId, String domainName) {
+		Map<String, AttributeValue> expressionValues = new HashMap<>();
+		expressionValues.put(":file_id", AttributeValue.builder().s(fileId).build());
+		expressionValues.put(":domain_name", AttributeValue.builder().s(domainName).build());
+		expressionValues.put(":policy_id", AttributeValue.builder().s(policyId).build());
+		expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
+		expressionValues.put(":is_handled", AttributeValue.builder().n("0").build());
+
+		ScanRequest scanRequest = ScanRequest.builder().tableName(tableName).filterExpression(
+				"file_id = :file_id  AND domain_name = :domain_name AND policy_id = :policy_id AND is_processed = :is_processed AND is_handled= :is_handled")
+				.expressionAttributeValues(expressionValues).build();
+
+		List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
+
+		if (results.isEmpty()) {
+			throw new RuntimeException("Data not found in staging table.");
+		}
+
+		return results;
+	}
+
+
+	@Override
+	public void updateStagingProcessedStatus(String tableName, String id, String newStatus) {
+		DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+		String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
+
+		Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(id).build());
+
+		UpdateItemRequest req = UpdateItemRequest.builder().tableName(tableName).key(key)
+				.updateExpression("SET is_processed = :s, updated_date = :ud")
+				.expressionAttributeValues(Map.of(":s", AttributeValue.builder().s(newStatus).build(), ":ud",
+						AttributeValue.builder().s(updatedDate).build()))
+				.conditionExpression("attribute_exists(id)").build();
+
+		dynamoDbClient.updateItem(req);
+	}
+
+	public Map<String, AttributeValue> getDomainNameByFileID(String tableName, String id) {
+		try {
+			GetItemRequest getItemRequest = GetItemRequest.builder().tableName(tableName)
+					.key(Map.of("id", AttributeValue.builder().s(id).build())).build();
+
+			GetItemResponse response = dynamoDbClient.getItem(getItemRequest);
+			return response.item();
+		} catch (DynamoDbException e) {
+			System.err.println("Error retrieving item: " + e.getMessage());
+			return null;
+		}
+	}
+	
 	
 	@Override
-	public List<Map<String, AttributeValue>> getUnprocessedRecordsByFileId(String tableName,
-			String fileId,String policyId,String domainName) {
-	    Map<String, AttributeValue> expressionValues = new HashMap<>();
-	    expressionValues.put(":file_id", AttributeValue.builder().s(fileId).build());
-	    expressionValues.put(":domain_name", AttributeValue.builder().s(domainName).build());
-	    expressionValues.put(":policy_id", AttributeValue.builder().s(policyId).build());
-	    expressionValues.put(":is_processed", AttributeValue.builder().n("0").build());
+	public boolean claimStagingRow(String table, String stgId) {
+	    Map<String, AttributeValue> key = Map.of(
+	        
+	        "id",      AttributeValue.builder().s(stgId).build()
+	    );
 
-	    ScanRequest scanRequest = ScanRequest.builder()
-	        .tableName(tableName)
-	        .filterExpression("file_id = :file_id  AND domain_name = :domain_name AND policy_id = :policy_id AND is_processed = :is_processed")
-	        .expressionAttributeValues(expressionValues)
-	        .build();
+	    String nowStr = LocalDateTime.now(ZoneId.of("Asia/Singapore"))
+	            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+	    
 
-	    List<Map<String, AttributeValue>> results = dynamoDbClient.scan(scanRequest).items();
-
-        if (results.isEmpty()) {
-            throw new RuntimeException("Data not found in staging table." );
-        }
-
-	    return results;
+	    try {
+	        dynamoDbClient.updateItem(UpdateItemRequest.builder()
+	            .tableName(table)
+	            .key(key)
+	            .conditionExpression(
+	                "(attribute_not_exists(is_handled) OR is_handled = :zero) " +
+	                "AND (attribute_not_exists(is_processed) OR is_processed = :zero)"
+	            )
+	            // record the claimer so only the winner pod can mark processed later
+	            .updateExpression("SET is_handled = :one, updated_date = :nowStr, claimed_at = :nowTs")
+	            .expressionAttributeValues(Map.of(
+	                ":zero",  AttributeValue.builder().n("0").build(),
+	                ":one",   AttributeValue.builder().n("1").build(),
+	                ":nowStr",AttributeValue.builder().s(nowStr).build(),
+	                ":nowTs", AttributeValue.builder().s(nowStr).build()
+	            ))
+	            .build());
+	        return true;  
+	    } catch (software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException e) {
+	        return false;
+	    }
 	}
 
-	
-    @Override
-    public void updateStagingProcessedStatus(String tableName, String id, String newStatus) {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
+	@Override
+	public void markProcessed(String table, String stgId) {
+	    Map<String, AttributeValue> key = Map.of(
+	      
+	        "id",      AttributeValue.builder().s(stgId).build()
+	    );
 
-        Map<String, AttributeValue> key = Map.of("id", AttributeValue.builder().s(id).build());
+	    String nowStr = LocalDateTime.now(ZoneId.of("Asia/Singapore"))
+	            .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+	    
 
-        UpdateItemRequest req = UpdateItemRequest.builder()
-            .tableName(tableName)
-            .key(key)
-            .updateExpression("SET is_processed = :s, updated_date = :ud")
-            .expressionAttributeValues(Map.of(
-                ":s", AttributeValue.builder().s(newStatus).build(),
-                ":ud", AttributeValue.builder().s(updatedDate).build()
-            ))
-            .conditionExpression("attribute_exists(id)")
-            .build();
+	    dynamoDbClient.updateItem(UpdateItemRequest.builder()
+	        .tableName(table)
+	        .key(key)
+	        .conditionExpression(
+	            "is_handled = :one AND (attribute_not_exists(is_processed) OR is_processed = :zero) "
+	        )
+	        .updateExpression("SET is_processed = :one, processed_at = :nowTs, updated_date = :nowStr")
+	        .expressionAttributeValues(Map.of(
+	            ":zero",  AttributeValue.builder().n("0").build(),
+	            ":one",   AttributeValue.builder().n("1").build(),
+	            ":nowTs", AttributeValue.builder().s(nowStr).build(),
+	            ":nowStr",AttributeValue.builder().s(nowStr).build()
+	        ))
+	        .build());
+	}
 
-        dynamoDbClient.updateItem(req);
-    }
-    
-    public Map<String, AttributeValue> getDomainNameByFileID(String tableName, String id) {
-        try {
-            GetItemRequest getItemRequest = GetItemRequest.builder()
-                    .tableName(tableName)
-                    .key(Map.of("id", AttributeValue.builder().s(id).build()))
-                    .build();
+	@Override
+	public void revertClaim(String table, String stgId) {
+	    Map<String, AttributeValue> key = Map.of(
+	        "id", AttributeValue.builder().s(stgId).build()
+	    );
 
-            GetItemResponse response = dynamoDbClient.getItem(getItemRequest);
-            return response.item();
-        } catch (DynamoDbException e) {
-            System.err.println("Error retrieving item: " + e.getMessage());
-            return null;
-        }
-    }
+	    dynamoDbClient.updateItem(UpdateItemRequest.builder()
+	        .tableName(table)
+	        .key(key)
+	        .conditionExpression(
+	            "is_handled = :one AND (attribute_not_exists(is_processed) OR is_processed = :zero)"
+	        )
+	        .updateExpression("SET is_handled = :zero REMOVE claimed_at")
+	        .expressionAttributeValues(Map.of(
+	            ":zero", AttributeValue.builder().n("0").build(),
+	            ":one",  AttributeValue.builder().n("1").build()
+	        ))
+	        .build());
+	}
 
 
 }
