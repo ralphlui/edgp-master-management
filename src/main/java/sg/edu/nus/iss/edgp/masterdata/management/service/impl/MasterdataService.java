@@ -169,6 +169,8 @@ public class MasterdataService implements IMasterdataService {
 					fileStatus = "";
 				}
 				row.put("file_status", fileStatus);
+			}else {
+				row.put("file_status", fileStatus);
 			}
 
 			String policyId = asStringAndRemove(row, "policy_id");
