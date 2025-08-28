@@ -1,5 +1,7 @@
 package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
+import java.util.Map;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -84,6 +86,39 @@ public class DataUploadValidation {
 			}
 		}
 
+	}
+	public ValidationResult isValidToUpdate(Map<String, Object> data) {
+		ValidationResult result = new ValidationResult();
+		
+		if (!data.containsKey("id")) {
+			result.setValid(false);
+			result.setMessage("Missing 'id' field in request.");
+			result.setStatus(HttpStatus.BAD_REQUEST);
+			return result;
+			 
+		}
+
+		
+		if(data.isEmpty() || data == null) {
+			result.setValid(false);
+			result.setMessage("Update data is required.");
+			result.setStatus(HttpStatus.BAD_REQUEST);
+			return result;
+		}
+		
+		String id = String.valueOf(data.get("id"));
+		
+		if(id.isEmpty() || id == null) {
+			result.setValid(false);
+			result.setMessage("Id is required.");
+			result.setStatus(HttpStatus.BAD_REQUEST);
+			return result;
+		}
+		 
+		
+		result.setValid(true);
+		result.setStatus(HttpStatus.OK);
+		return result;
 	}
 
 }

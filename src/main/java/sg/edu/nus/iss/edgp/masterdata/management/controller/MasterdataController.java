@@ -184,6 +184,47 @@ public class MasterdataController {
 		}
 	}
 	
+	@PutMapping(value = "/update", produces = "application/json")
+	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	public ResponseEntity<APIResponse<List<Map<String, Object>>>>  updateData(
+			@RequestHeader("Authorization") String authorizationHeader,
+			@RequestBody Map<String, Object> data) {
+
+		final String activityType = "Update Master Data";
+
+		final HTTPVerb httpMethod = HTTPVerb.POST;
+		String message = "";
+		String endPoint = API_ENDPOINT + "/update";
+		AuditDTO auditDTO = auditService.createAuditDTO(INVALID_USER_ID, activityType, activityTypePrefix, endPoint,
+				httpMethod);
+
+		try {
+			ValidationResult validResult = dataUploadValidation.isValidToUpdate(data);
+			if(!validResult.isValid()) {
+				message = validResult.getMessage();
+				auditService.logAudit(auditDTO,  400, message, authorizationHeader);
+				return ResponseEntity.status(validResult.getStatus()).body(APIResponse.error(message));
+
+			}
+			UploadResult result = masterdataService.updateDataToTable(data);
+			if (result.getTotalRecord()< 1) {
+				message = result.getMessage();
+				auditService.logAudit(auditDTO, 500, message, authorizationHeader);
+				return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
+
+			}
+			
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result.getData(), result.getMessage(), result.getTotalRecord()));
+		} catch (Exception e) {
+
+			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
+
+			logger.error(LOG_MESSAGE_FORMAT, message, e.getMessage());
+			auditDTO.setRemarks(e.getMessage());
+			auditService.logAudit(auditDTO, 500, message, authorizationHeader);
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(APIResponse.error(message));
+		}
+	}
 	
 
 }

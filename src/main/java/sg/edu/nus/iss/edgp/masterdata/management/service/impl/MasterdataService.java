@@ -10,8 +10,10 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,8 +37,13 @@ import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
+import software.amazon.awssdk.services.dynamodb.model.ReturnValue;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 @RequiredArgsConstructor
 @Service
@@ -169,7 +176,7 @@ public class MasterdataService implements IMasterdataService {
 					fileStatus = "";
 				}
 				row.put("file_status", fileStatus);
-			}else {
+			} else {
 				row.put("file_status", fileStatus);
 			}
 
@@ -371,13 +378,13 @@ public class MasterdataService implements IMasterdataService {
 						Map<String, AttributeValue> item = new LinkedHashMap<>(record);
 
 						String stgID = item.get("id").s();
- 
-						
+
 						if (dynamoService.claimStagingRow(stagingTableName, stgID)) {
 							logger.info("Update handled status: " + stgID);
-						    try {
-						        
-								item.put("id", AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
+							try {
+
+								item.put("id",
+										AttributeValue.builder().s(java.util.UUID.randomUUID().toString()).build());
 								item.put("domain_name", AttributeValue.builder().s(domainName).build());
 
 								// Remove staging-only metadata
@@ -405,7 +412,8 @@ public class MasterdataService implements IMasterdataService {
 									item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
 									item.put("final_status", AttributeValue.builder().s("").build());
 									item.put("rule_status", AttributeValue.builder().s("").build());
-									item.put("failed_validations", AttributeValue.builder().l(Collections.emptyList()).build());
+									item.put("failed_validations",
+											AttributeValue.builder().l(Collections.emptyList()).build());
 
 									// (4) Insert into Workflow Status table
 									dynamoService.insertValidatedMasterData(mdataTaskTrackerTable.trim(), item);
@@ -415,18 +423,15 @@ public class MasterdataService implements IMasterdataService {
 
 									// (6) Mark staging as processed
 									dynamoService.markProcessed(stagingTableName, stgID);
-							    	
 
 									processedCount++;
 								}
-						    } catch (Exception ex) {
-						        // sending failed — allow another pod to retry later
-						    	dynamoService.revertClaim(stagingTableName, stgID);
-						    	logger.error("Error processing id : {},{}",stgID, ex.getMessage());
-						    }
+							} catch (Exception ex) {
+								// sending failed — allow another pod to retry later
+								dynamoService.revertClaim(stagingTableName, stgID);
+								logger.error("Error processing id : {},{}", stgID, ex.getMessage());
+							}
 						}
-
-					
 
 					} catch (Exception ex) {
 						logger.error("Error processing record : {}", ex.getMessage());
@@ -558,9 +563,172 @@ public class MasterdataService implements IMasterdataService {
 	}
 
 	@Override
-	public void updateData(UploadRequest uploadRequest, String authorizationHeader) {
-		// TODO Auto-generated method stub
+	public UploadResult updateDataToTable(Map<String, Object> data) {
+		// 1) Require id
+		if (!data.containsKey("id")) {
+			 return new UploadResult("Missing 'id' field in request: ", 0, List.of());
+		
+		}
+		String workflowId = String.valueOf(data.get("id"));
+		 
 
+        // 2. Lookup staging id from mapping table
+        GetItemResponse mappingResp = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(mdataTaskTrackerTable.trim())
+                .key(Map.of("id", AttributeValue.builder().s(workflowId).build()))
+                .consistentRead(true)
+                .build());
+
+        if (!mappingResp.hasItem() || mappingResp.item().isEmpty()) {
+            return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
+        }
+
+        String stgId = mappingResp.item().get("stg_id").s();
+
+        if(stgId.isEmpty() || stgId == null) {
+        	 return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
+        
+        }
+
+		// 3) Load current item
+		GetItemResponse get = dynamoDbClient.getItem(GetItemRequest.builder().tableName(stagingTableName)
+				.key(Map.of("id", AttributeValue.builder().s(stgId).build())).consistentRead(true).build());
+
+		if (!get.hasItem() || get.item().isEmpty()) {
+
+			 return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
+		}
+
+		Map<String, AttributeValue> current = get.item();
+
+		Map<String, String> ean = new LinkedHashMap<>();
+		Map<String, AttributeValue> eav = new LinkedHashMap<>();
+		List<String> setParts = new ArrayList<>();
+		int idx = 0;
+		int updatedFields = 0;
+
+		for (Map.Entry<String, Object> entry : data.entrySet()) {
+			String field = entry.getKey();
+			if ("id".equals(field))
+				continue; // never update key
+			if (!current.containsKey(field))
+				continue; // skip new/unknown fields
+
+			Object raw = entry.getValue();
+			if (raw == null)
+				continue; // skip nulls
+
+			AttributeValue target = toAttr(raw);
+			AttributeValue existing = current.get(field);
+
+			if (equalsAttr(existing, target))
+				continue; // skip if same
+
+			String nameTok = "#n" + idx;
+			String valTok = ":v" + idx;
+			ean.put(nameTok, field);
+			eav.put(valTok, target);
+			setParts.add(nameTok + " = " + valTok);
+			updatedFields++;
+			idx++;
+		}
+
+		if (updatedFields == 0) {
+
+			return new UploadResult("No changes applied (all fields skipped or identical).", 0,
+					List.of(fromAttrMap(current)));
+		}
+
+		String updateExp = "SET " + String.join(", ", setParts);
+
+		UpdateItemResponse resp = dynamoDbClient.updateItem(UpdateItemRequest.builder().tableName(stagingTableName)
+				.key(Map.of("id", AttributeValue.builder().s(stgId).build())).conditionExpression("attribute_exists(#k)")
+				.expressionAttributeNames(merge(ean, Map.of("#k", "id"))).expressionAttributeValues(eav)
+				.updateExpression(updateExp).returnValues(ReturnValue.ALL_NEW).build());
+
+		Map<String, Object> updated = fromAttrMap(resp.attributes());
+
+		return new UploadResult("Updated " + updatedFields + " field(s).", updatedFields, List.of(updated));
+	}
+
+	private static Map<String, String> merge(Map<String, String> a, Map<String, String> b) {
+		Map<String, String> m = new LinkedHashMap<>(a);
+		m.putAll(b);
+		return m;
+	}
+
+	private AttributeValue toAttr(Object v) {
+		if (v instanceof Number)
+			return AttributeValue.builder().n(String.valueOf(v)).build();
+		if (v instanceof Boolean)
+			return AttributeValue.builder().bool((Boolean) v).build();
+		if (v instanceof Map)
+			return AttributeValue.builder()
+					.m(((Map<?, ?>) v).entrySet().stream()
+							.collect(Collectors.toMap(e -> String.valueOf(e.getKey()), e -> toAttr(e.getValue()))))
+					.build();
+		if (v instanceof List)
+			return AttributeValue.builder().l(((List<?>) v).stream().map(this::toAttr).collect(Collectors.toList()))
+					.build();
+
+		return AttributeValue.builder().s(String.valueOf(v)).build();
+	}
+
+	private boolean equalsAttr(AttributeValue a, AttributeValue b) {
+		if (a == null && b == null)
+			return true;
+		if (a == null || b == null)
+			return false;
+
+		if (a.s() != null || b.s() != null)
+			return Objects.equals(a.s(), b.s());
+		if (a.n() != null || b.n() != null)
+			return Objects.equals(a.n(), b.n());
+		if (a.bool() != null || b.bool() != null)
+			return Objects.equals(a.bool(), b.bool());
+		if (a.hasM() || b.hasM())
+			return Objects.equals(a.m(), b.m());
+		if (a.hasL() || b.hasL())
+			return Objects.equals(a.l(), b.l());
+		if (a.nul() != null || b.nul() != null)
+			return Objects.equals(a.nul(), b.nul());
+		if (a.hasSs() || b.hasSs())
+			return Objects.equals(a.ss(), b.ss());
+		if (a.hasNs() || b.hasNs())
+			return Objects.equals(a.ns(), b.ns());
+		if (a.hasBs() || b.hasBs())
+			return Objects.equals(a.bs(), b.bs());
+		return a.equals(b);
+	}
+
+	private Map<String, Object> fromAttrMap(Map<String, AttributeValue> attrs) {
+		Map<String, Object> out = new LinkedHashMap<>();
+		attrs.forEach((k, v) -> out.put(k, fromAttr(v)));
+		return out;
+	}
+
+	private Object fromAttr(AttributeValue a) {
+		if (a.s() != null)
+			return a.s();
+		if (a.n() != null)
+			return new java.math.BigDecimal(a.n());
+		if (a.bool() != null)
+			return a.bool();
+		if (a.hasM()) {
+			return a.m().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> fromAttr(e.getValue())));
+		}
+		if (a.hasL()) {
+			return a.l().stream().map(this::fromAttr).collect(Collectors.toList());
+		}
+		if (a.nul() != null && a.nul())
+			return null;
+		if (a.hasSs())
+			return new java.util.HashSet<>(a.ss());
+		if (a.hasNs())
+			return new java.util.HashSet<>(a.ns());
+		if (a.hasBs())
+			return new java.util.HashSet<>(a.bs());
+		return null;
 	}
 
 }

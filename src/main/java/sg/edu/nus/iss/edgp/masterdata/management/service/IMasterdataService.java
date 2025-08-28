@@ -27,6 +27,6 @@ public interface IMasterdataService {
 	
 	int processAndSendRawDataToSqs();
 	
-	void updateData(UploadRequest uploadRequest,String authorizationHeader);
+	UploadResult updateDataToTable( Map<String, Object> updates);
 
 }
