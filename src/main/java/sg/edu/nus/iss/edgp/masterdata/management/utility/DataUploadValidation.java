@@ -1,5 +1,6 @@
 package sg.edu.nus.iss.edgp.masterdata.management.utility;
 
+import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import lombok.RequiredArgsConstructor;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.ValidationResult;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyRoot;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.UploadRequest;
@@ -97,6 +99,15 @@ public class DataUploadValidation {
 			return result;
 			 
 		}
+		
+		if (!data.containsKey("file_id")) {
+			result.setValid(false);
+			result.setMessage("Missing 'file id' field in request.");
+			result.setStatus(HttpStatus.BAD_REQUEST);
+			return result;
+			 
+		}
+	
 
 		
 		if(data.isEmpty() || data == null) {

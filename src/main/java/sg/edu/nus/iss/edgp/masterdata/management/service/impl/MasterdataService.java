@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -20,6 +19,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.*;
@@ -34,6 +35,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceExce
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -564,206 +566,354 @@ public class MasterdataService implements IMasterdataService {
 
 	@Override
 	public UploadResult updateDataToTable(Map<String, Object> data) {
-		// 1) Require id
-		if (!data.containsKey("id")) {
-			 return new UploadResult("Missing 'id' field in request: ", 0, List.of());
-		
-		}
-		String workflowId = String.valueOf(data.get("id"));
-		 
+        // 1) Task Tracker id
+        if (data == null || !data.containsKey("id")) {
+            return new UploadResult("Missing 'id' field in request.", 0, List.of());
+        }
+        
+        if (data == null || !data.containsKey("file_id")) {
+            return new UploadResult("Missing 'file id' field in request.", 0, List.of());
+        }
+        final String workflowId = String.valueOf(data.get("id"));
+        final String fileId=String.valueOf(data.get("file_id"));
+        
 
-        // 2. Lookup staging id from mapping table
+        // 2) Lookup staging id from tracker table
         GetItemResponse mappingResp = dynamoDbClient.getItem(GetItemRequest.builder()
                 .tableName(mdataTaskTrackerTable.trim())
                 .key(Map.of("id", AttributeValue.builder().s(workflowId).build()))
                 .consistentRead(true)
                 .build());
 
-        if (!mappingResp.hasItem() || mappingResp.item().isEmpty()) {
+        if (!mappingResp.hasItem() || mappingResp.item().isEmpty()
+                || mappingResp.item().get("stg_id") == null
+                || mappingResp.item().get("stg_id").s() == null
+                || mappingResp.item().get("stg_id").s().isEmpty()) {
             return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
         }
-
-        String stgId = mappingResp.item().get("stg_id").s();
-
-        if(stgId.isEmpty() || stgId == null) {
-        	 return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
+        final String stgId = mappingResp.item().get("stg_id").s();
         
+         
+        // 3) Read current staging + header items
+        Map<String, AttributeValue> stagingKey = Map.of("id", AttributeValue.builder().s(stgId).build());
+        Map<String, AttributeValue> headerKey  = Map.of("id", AttributeValue.builder().s(fileId).build());
+
+        GetItemResponse getStg = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(stagingTableName.trim())
+                .key(stagingKey)
+                .consistentRead(true)
+                .build());
+
+        GetItemResponse getHdr = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(headerTableName.trim())
+                .key(headerKey)
+                .consistentRead(true)
+                .build());
+
+        if (!getStg.hasItem() || getStg.item().isEmpty()) {
+            return new UploadResult("Staging item not found for stg_id: " + stgId, 0, List.of());
+        }
+        if (!getHdr.hasItem() || getHdr.item().isEmpty()) {
+            return new UploadResult("Header item not found for file_id: " + workflowId, 0, List.of());
         }
 
-		// 3) Load current item
-		GetItemResponse get = dynamoDbClient.getItem(GetItemRequest.builder().tableName(stagingTableName)
-				.key(Map.of("id", AttributeValue.builder().s(stgId).build())).consistentRead(true).build());
+        Map<String, AttributeValue> stgCurrent = getStg.item();
+        Map<String, AttributeValue> hdrCurrent = getHdr.item();
 
-		if (!get.hasItem() || get.item().isEmpty()) {
+        // 4) Build updates
+        BuiltUpdate stgUpd = buildStagingUpdateParts(data, stgCurrent);
+        BuiltUpdate hdrUpd = buildHeaderUpdateParts(data, hdrCurrent);
 
-			 return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
-		}
+        if (stgUpd.setParts.isEmpty() && hdrUpd.setParts.isEmpty()) {
+            return new UploadResult("No changes applied (both header & staging identical).",
+                    0, List.of(fromAttrMap(hdrCurrent), fromAttrMap(stgCurrent)));
+        }
 
-		Map<String, AttributeValue> current = get.item();
+        // 5) Update STAGING first
+        Map<String, Object> stgBefore = fromAttrMap(stgCurrent);
+        boolean stagingUpdated = false;
+        try {
+            if (!stgUpd.setParts.isEmpty()) {
+                UpdateItemResponse stgResp = dynamoDbClient.updateItem(UpdateItemRequest.builder()
+                        .tableName(stagingTableName.trim())
+                        .key(stagingKey)
+                        .updateExpression("SET " + String.join(", ", stgUpd.setParts))
+                        .expressionAttributeNames(merge(stgUpd.ean, Map.of("#k", "id")))
+                        .expressionAttributeValues(stgUpd.eav)
+                        .conditionExpression("attribute_exists(#k)")
+                        .returnValues(ReturnValue.ALL_NEW)
+                        .build());
+                stgCurrent = stgResp.attributes();
+                stagingUpdated = true;
+            }
+        } catch (Exception e) {
+            return new UploadResult("Failed to update staging: " + e.getMessage(), 0,
+                    List.of(fromAttrMap(hdrCurrent), stgBefore));
+        }
 
-		Map<String, String> ean = new LinkedHashMap<>();
-		Map<String, AttributeValue> eav = new LinkedHashMap<>();
-		List<String> setParts = new ArrayList<>();
-		int idx = 0;
-		int updatedFields = 0;
+        // 6) Update HEADER
+        try {
+            if (!hdrUpd.setParts.isEmpty()) {
+                UpdateItemResponse hdrResp = dynamoDbClient.updateItem(UpdateItemRequest.builder()
+                        .tableName(headerTableName.trim())
+                        .key(headerKey)
+                        .updateExpression("SET " + String.join(", ", hdrUpd.setParts))
+                        .expressionAttributeNames(merge(hdrUpd.ean, Map.of("#k", "id")))
+                        .expressionAttributeValues(hdrUpd.eav)
+                        .conditionExpression("attribute_exists(#k)")
+                        .returnValues(ReturnValue.ALL_NEW)
+                        .build());
+                hdrCurrent = hdrResp.attributes();
+            }
+        } catch (Exception e) {
+            // 7) rollback of staging if header failed
+            if (stagingUpdated) {
+                try {
+                    BuiltUpdate rollback = buildRollbackFromSnapshot(stgBefore, stgCurrent);
+                    if (!rollback.setParts.isEmpty()) {
+                        dynamoDbClient.updateItem(UpdateItemRequest.builder()
+                                .tableName(stagingTableName.trim())
+                                .key(stagingKey)
+                                .updateExpression("SET " + String.join(", ", rollback.setParts))
+                                .expressionAttributeNames(rollback.ean)
+                                .expressionAttributeValues(rollback.eav)
+                                .returnValues(ReturnValue.NONE)
+                                .build());
+                    }
+                } catch (Exception ignore) { /* rollback errors */ }
+            }
+            return new UploadResult("Failed to update header: " + e.getMessage(), 0,
+                    List.of(fromAttrMap(hdrCurrent), fromAttrMap(stgCurrent)));
+        }
 
-		for (Map.Entry<String, Object> entry : data.entrySet()) {
-			String field = entry.getKey();
-			if ("id".equals(field))
-				continue; // never update key
-			if (!current.containsKey(field))
-				continue; // skip new/unknown fields
+        // 8) Read updated data for response
+        Map<String, AttributeValue> stgNew = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(stagingTableName.trim()).key(stagingKey).consistentRead(true).build()).item();
 
-			Object raw = entry.getValue();
-			if (raw == null)
-				continue; // skip nulls
+        Map<String, AttributeValue> hdrNew = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(headerTableName.trim()).key(headerKey).consistentRead(true).build()).item();
 
-			AttributeValue target = toAttr(raw);
-			AttributeValue existing = current.get(field);
+        int updatedCount = stgUpd.updatedFields + hdrUpd.updatedFields;
+        
+        logger.info("Updated " + updatedCount + " field(s) across header & staging; workflow reset.");
 
-			if (equalsAttr(existing, target))
-				continue; // skip if same
+        return new UploadResult(
+                "Data updated successfully.",
+                1,
+                List.of(fromAttrMap(stgNew))
+        );
+    }
 
-			String nameTok = "#n" + idx;
-			String valTok = ":v" + idx;
-			ean.put(nameTok, field);
-			eav.put(valTok, target);
-			setParts.add(nameTok + " = " + valTok);
-			updatedFields++;
-			idx++;
-		}
-		
-		// 4. Always reset staging fields
-	    {
-	        // processed_at → empty string
-	        ean.put("#processed_at", "processed_at");
-	        eav.put(":processedEmpty", AttributeValue.builder().s("").build());
-	        setParts.add("#processed_at = :processedEmpty");
+    
+   
+    private BuiltUpdate buildStagingUpdateParts(Map<String, Object> payload,
+                                                Map<String, AttributeValue> current) {
+        Map<String, String> ean = new LinkedHashMap<>();
+        Map<String, AttributeValue> eav = new LinkedHashMap<>();
+        List<String> setParts = new ArrayList<>();
+        int updatedFields = 0;
+        int idx = 0;
 
-	        // is_processed → 0
-	        ean.put("#is_processed", "is_processed");
-	        eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
-	        setParts.add("#is_processed = :zeroProcessed");
+        
+        for (Map.Entry<String, Object> entry : payload.entrySet()) {
+            String field = entry.getKey();
+            if ("id".equals(field)) continue;
+            if (!current.containsKey(field)) continue;
+            Object raw = entry.getValue();
+            if (raw == null) continue;
 
-	        // claimed_at → empty string
-	        ean.put("#claimed_at", "claimed_at");
-	        eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
-	        setParts.add("#claimed_at = :claimedEmpty");
+            AttributeValue target = toAttr(raw);
+            AttributeValue existing = current.get(field);
+            if (equalsAttr(existing, target)) continue;
 
-	        // is_handled → 0
-	        ean.put("#is_handled", "is_handled");
-	        eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
-	        setParts.add("#is_handled = :zeroHandled");
+            String n = "#n" + idx, v = ":v" + idx;
+            ean.put(n, field); eav.put(v, target);
+            setParts.add(n + " = " + v);
+            updatedFields++; idx++;
+        }
 
-	        
-	        // updated_date → now
-	        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-	    	String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
+        // Resets (only if attribute exists)
+        if (current.containsKey("processed_at")) {
+            ean.put("#processed_at", "processed_at");
+            eav.put(":processedEmpty", AttributeValue.builder().s("").build());
+            setParts.add("#processed_at = :processedEmpty"); updatedFields++;
+        }
+        if (current.containsKey("is_processed")) {
+            ean.put("#is_processed", "is_processed");
+            eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
+            setParts.add("#is_processed = :zeroProcessed"); updatedFields++;
+        }
+        if (current.containsKey("claimed_at")) {
+            ean.put("#claimed_at", "claimed_at");
+            eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
+            setParts.add("#claimed_at = :claimedEmpty"); updatedFields++;
+        }
+        if (current.containsKey("is_handled")) {
+            ean.put("#is_handled", "is_handled");
+            eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
+            setParts.add("#is_handled = :zeroHandled"); updatedFields++;
+        }
+        if (current.containsKey("updated_date")) {
+            ean.put("#updated_date", "updated_date");
+            eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
+            setParts.add("#updated_date = :now"); updatedFields++;
+        }
 
-	        ean.put("#updated_date", "updated_date");
-	        eav.put(":now", AttributeValue.builder().s(updatedDate).build());
-	        setParts.add("#updated_date = :now");
+        return new BuiltUpdate(ean, eav, setParts, updatedFields);
+    }
 
-	        updatedFields += 5; // count resets
-	    }
+    private BuiltUpdate buildHeaderUpdateParts(Map<String, Object> payload,
+                                               Map<String, AttributeValue> current) {
+        Map<String, String> ean = new LinkedHashMap<>();
+        Map<String, AttributeValue> eav = new LinkedHashMap<>();
+        List<String> setParts = new ArrayList<>();
+      
+        int updatedFields = 0;
+        int idx = 0;
 
+        
+        for (Map.Entry<String, Object> entry : payload.entrySet()) {
+            String field = entry.getKey();
+            if ("id".equals(field)) continue;
+            if (!current.containsKey(field)) continue;
+            Object raw = entry.getValue();
+            if (raw == null) continue;
 
-		if (updatedFields == 0) {
+            AttributeValue target = toAttr(raw);
+            AttributeValue existing = current.get(field);
+            if (equalsAttr(existing, target)) continue;
 
-			return new UploadResult("No changes applied (all fields skipped or identical).", 0,
-					List.of(fromAttrMap(current)));
-		}
+            String n = "#n" + idx, v = ":v" + idx;
+            ean.put(n, field); eav.put(v, target);
+            setParts.add(n + " = " + v);
+            updatedFields++; idx++;
+        }
 
-		String updateExp = "SET " + String.join(", ", setParts);
+        // Resets (only if attribute exists)
+        if (current.containsKey("file_status")) {
+            ean.put("#file_status", "file_status");
+            eav.put(":fileStatusEmpty", AttributeValue.builder().s("").build());
+            setParts.add("#file_status = :fileStatusEmpty"); updatedFields++;
+        }
+        if (current.containsKey("is_processed")) {
+            ean.put("#is_processed", "is_processed");
+            eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
+            setParts.add("#is_processed = :zeroProcessed"); updatedFields++;
+        }
+        if (current.containsKey("process_stage")) {
+            ean.put("#process_stage", "process_stage");
+            eav.put(":processStageEmpty", AttributeValue.builder().s(FileProcessStage.UNPROCESSED.toString()).build());
+            setParts.add("#process_stage = :processStageEmpty"); updatedFields++;
+        }
+        if (current.containsKey("updated_date")) {
+            ean.put("#updated_date", "updated_date");
+            eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
+            setParts.add("#updated_date = :now"); updatedFields++;
+        }
 
-		UpdateItemResponse resp = dynamoDbClient.updateItem(UpdateItemRequest.builder().tableName(stagingTableName)
-				.key(Map.of("id", AttributeValue.builder().s(stgId).build())).conditionExpression("attribute_exists(#k)")
-				.expressionAttributeNames(merge(ean, Map.of("#k", "id"))).expressionAttributeValues(eav)
-				.updateExpression(updateExp).returnValues(ReturnValue.ALL_NEW).build());
+        return new BuiltUpdate(ean, eav, setParts, updatedFields);
+    }
 
-		Map<String, Object> updated = fromAttrMap(resp.attributes());
+    
+    private BuiltUpdate buildRollbackFromSnapshot(Map<String, Object> before,
+                                                  Map<String, AttributeValue> afterAttrs) {
+        Map<String, String> ean = new LinkedHashMap<>();
+        Map<String, AttributeValue> eav = new LinkedHashMap<>();
+        List<String> setParts = new ArrayList<>();
+        int idx = 0;
 
-		return new UploadResult("Data updated successfully.", 1, List.of(updated));
-	}
+        Map<String, Object> after = fromAttrMap(afterAttrs);
 
-	private static Map<String, String> merge(Map<String, String> a, Map<String, String> b) {
-		Map<String, String> m = new LinkedHashMap<>(a);
-		m.putAll(b);
-		return m;
-	}
+        for (Map.Entry<String, Object> e : before.entrySet()) {
+            String field = e.getKey();
+            if ("id".equals(field)) continue;
 
-	private AttributeValue toAttr(Object v) {
-		if (v instanceof Number)
-			return AttributeValue.builder().n(String.valueOf(v)).build();
-		if (v instanceof Boolean)
-			return AttributeValue.builder().bool((Boolean) v).build();
-		if (v instanceof Map)
-			return AttributeValue.builder()
-					.m(((Map<?, ?>) v).entrySet().stream()
-							.collect(Collectors.toMap(e -> String.valueOf(e.getKey()), e -> toAttr(e.getValue()))))
-					.build();
-		if (v instanceof List)
-			return AttributeValue.builder().l(((List<?>) v).stream().map(this::toAttr).collect(Collectors.toList()))
-					.build();
+            Object beforeVal = e.getValue();
+            Object afterVal  = after.get(field);
 
-		return AttributeValue.builder().s(String.valueOf(v)).build();
-	}
+            if (Objects.equals(beforeVal, afterVal)) continue;
 
-	private boolean equalsAttr(AttributeValue a, AttributeValue b) {
-		if (a == null && b == null)
-			return true;
-		if (a == null || b == null)
-			return false;
+            String n = "#rbn" + idx, v = ":rbv" + idx;
+            ean.put(n, field);
+            eav.put(v, toAttr(beforeVal));
+            setParts.add(n + " = " + v);
+            idx++;
+        }
+        return new BuiltUpdate(ean, eav, setParts, idx);
+    }
+ 
+    private static Map<String, String> merge(Map<String, String> a, Map<String, String> b) {
+        Map<String, String> m = new LinkedHashMap<>(a);
+        m.putAll(b);
+        return m;
+    }
 
-		if (a.s() != null || b.s() != null)
-			return Objects.equals(a.s(), b.s());
-		if (a.n() != null || b.n() != null)
-			return Objects.equals(a.n(), b.n());
-		if (a.bool() != null || b.bool() != null)
-			return Objects.equals(a.bool(), b.bool());
-		if (a.hasM() || b.hasM())
-			return Objects.equals(a.m(), b.m());
-		if (a.hasL() || b.hasL())
-			return Objects.equals(a.l(), b.l());
-		if (a.nul() != null || b.nul() != null)
-			return Objects.equals(a.nul(), b.nul());
-		if (a.hasSs() || b.hasSs())
-			return Objects.equals(a.ss(), b.ss());
-		if (a.hasNs() || b.hasNs())
-			return Objects.equals(a.ns(), b.ns());
-		if (a.hasBs() || b.hasBs())
-			return Objects.equals(a.bs(), b.bs());
-		return a.equals(b);
-	}
+    private AttributeValue toAttr(Object v) {
+        if (v == null) return AttributeValue.builder().nul(true).build();
+        if (v instanceof Number)  return AttributeValue.builder().n(String.valueOf(v)).build();
+        if (v instanceof Boolean) return AttributeValue.builder().bool((Boolean) v).build();
+        if (v instanceof Map)     return AttributeValue.builder().m(
+                ((Map<?, ?>) v).entrySet().stream()
+                        .collect(Collectors.toMap(
+                                e -> String.valueOf(e.getKey()),
+                                e -> toAttr(e.getValue())
+                        ))
+        ).build();
+        if (v instanceof List)    return AttributeValue.builder().l(
+                ((List<?>) v).stream().map(this::toAttr).collect(Collectors.toList())
+        ).build();
+        return AttributeValue.builder().s(String.valueOf(v)).build();
+    }
 
-	private Map<String, Object> fromAttrMap(Map<String, AttributeValue> attrs) {
-		Map<String, Object> out = new LinkedHashMap<>();
-		attrs.forEach((k, v) -> out.put(k, fromAttr(v)));
-		return out;
-	}
+    private boolean equalsAttr(AttributeValue a, AttributeValue b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        if (a.s() != null || b.s() != null)   return Objects.equals(a.s(), b.s());
+        if (a.n() != null || b.n() != null)   return Objects.equals(a.n(), b.n());
+        if (a.bool() != null || b.bool() != null) return Objects.equals(a.bool(), b.bool());
+        if (a.hasM() || b.hasM())             return Objects.equals(a.m(), b.m());
+        if (a.hasL() || b.hasL())             return Objects.equals(a.l(), b.l());
+        if (a.nul() != null || b.nul() != null) return Objects.equals(a.nul(), b.nul());
+        if (a.hasSs() || b.hasSs())           return Objects.equals(a.ss(), b.ss());
+        if (a.hasNs() || b.hasNs())           return Objects.equals(a.ns(), b.ns());
+        if (a.hasBs() || b.hasBs())           return Objects.equals(a.bs(), b.bs());
+        return a.equals(b);
+    }
 
-	private Object fromAttr(AttributeValue a) {
-		if (a.s() != null)
-			return a.s();
-		if (a.n() != null)
-			return new java.math.BigDecimal(a.n());
-		if (a.bool() != null)
-			return a.bool();
-		if (a.hasM()) {
-			return a.m().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> fromAttr(e.getValue())));
-		}
-		if (a.hasL()) {
-			return a.l().stream().map(this::fromAttr).collect(Collectors.toList());
-		}
-		if (a.nul() != null && a.nul())
-			return null;
-		if (a.hasSs())
-			return new java.util.HashSet<>(a.ss());
-		if (a.hasNs())
-			return new java.util.HashSet<>(a.ns());
-		if (a.hasBs())
-			return new java.util.HashSet<>(a.bs());
-		return null;
-	}
+    private Map<String, Object> fromAttrMap(Map<String, AttributeValue> attrs) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        attrs.forEach((k, v) -> out.put(k, fromAttr(v)));
+        return out;
+    }
+
+    private Object fromAttr(AttributeValue a) {
+        if (a.s() != null) return a.s();
+        if (a.n() != null) return new BigDecimal(a.n());
+        if (a.bool() != null) return a.bool();
+        if (a.hasM()) {
+            return a.m().entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> fromAttr(e.getValue())));
+        }
+        if (a.hasL()) {
+            List<Object> list = new ArrayList<>();
+            for (AttributeValue av : a.l()) list.add(fromAttr(av));
+            return list;
+        }
+        if (a.nul() != null && a.nul()) return null;
+        if (a.hasSs()) return new HashSet<>(a.ss());
+        if (a.hasNs()) return new HashSet<>(a.ns());
+        if (a.hasBs()) return new HashSet<>(a.bs());
+        return null;
+    }
+
+   
+    
+    @lombok.Value
+    private static class BuiltUpdate {
+        Map<String, String> ean;
+        Map<String, AttributeValue> eav;
+        List<String>setParts;
+        int updatedFields;
+    }
 
 }
