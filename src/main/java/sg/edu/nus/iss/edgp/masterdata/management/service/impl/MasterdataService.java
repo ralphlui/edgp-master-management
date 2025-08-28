@@ -405,7 +405,7 @@ public class MasterdataService implements IMasterdataService {
 								String sqsMessage = prepareJsonMessage(item, fileId, policyId, domainName, uploadedBy);
 								if (!sqsMessage.isEmpty()) {
 									sqsPublishingService.sendRecordToQueue(sqsMessage);
-
+									item.put("staging_id", AttributeValue.builder().s(stgID).build());
 									item.put("created_date", AttributeValue.builder().s(createdDate).build());
 									item.put("organization_id", AttributeValue.builder().s(organizationId).build());
 									item.put("file_id", AttributeValue.builder().s(fileId).build());
@@ -586,12 +586,12 @@ public class MasterdataService implements IMasterdataService {
                 .build());
 
         if (!mappingResp.hasItem() || mappingResp.item().isEmpty()
-                || mappingResp.item().get("stg_id") == null
-                || mappingResp.item().get("stg_id").s() == null
-                || mappingResp.item().get("stg_id").s().isEmpty()) {
+                || mappingResp.item().get("staging_id") == null
+                || mappingResp.item().get("staging_id").s() == null
+                || mappingResp.item().get("staging_id").s().isEmpty()) {
             return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
         }
-        final String stgId = mappingResp.item().get("stg_id").s();
+        final String stgId = mappingResp.item().get("staging_id").s();
         
          
         // 3) Read current staging + header items
@@ -611,10 +611,10 @@ public class MasterdataService implements IMasterdataService {
                 .build());
 
         if (!getStg.hasItem() || getStg.item().isEmpty()) {
-            return new UploadResult("Staging item not found for stg_id: " + stgId, 0, List.of());
+            return new UploadResult("Staging item not found for Id: " + stgId, 0, List.of());
         }
         if (!getHdr.hasItem() || getHdr.item().isEmpty()) {
-            return new UploadResult("Header item not found for file_id: " + workflowId, 0, List.of());
+            return new UploadResult("Header item not found for Id: " + workflowId, 0, List.of());
         }
 
         Map<String, AttributeValue> stgCurrent = getStg.item();
