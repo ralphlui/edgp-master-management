@@ -632,6 +632,41 @@ public class MasterdataService implements IMasterdataService {
 			updatedFields++;
 			idx++;
 		}
+		
+		// 4. Always reset staging fields
+	    {
+	        // processed_at → empty string
+	        ean.put("#processed_at", "processed_at");
+	        eav.put(":processedEmpty", AttributeValue.builder().s("").build());
+	        setParts.add("#processed_at = :processedEmpty");
+
+	        // is_processed → 0
+	        ean.put("#is_processed", "is_processed");
+	        eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
+	        setParts.add("#is_processed = :zeroProcessed");
+
+	        // claimed_at → empty string
+	        ean.put("#claimed_at", "claimed_at");
+	        eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
+	        setParts.add("#claimed_at = :claimedEmpty");
+
+	        // is_handled → 0
+	        ean.put("#is_handled", "is_handled");
+	        eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
+	        setParts.add("#is_handled = :zeroHandled");
+
+	        
+	        // updated_date → now
+	        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+	    	String updatedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
+
+	        ean.put("#updated_date", "updated_date");
+	        eav.put(":now", AttributeValue.builder().s(updatedDate).build());
+	        setParts.add("#updated_date = :now");
+
+	        updatedFields += 5; // count resets
+	    }
+
 
 		if (updatedFields == 0) {
 
@@ -648,7 +683,7 @@ public class MasterdataService implements IMasterdataService {
 
 		Map<String, Object> updated = fromAttrMap(resp.attributes());
 
-		return new UploadResult("Updated " + updatedFields + " field(s).", updatedFields, List.of(updated));
+		return new UploadResult("Data updated successfully.", 1, List.of(updated));
 	}
 
 	private static Map<String, String> merge(Map<String, String> a, Map<String, String> b) {
