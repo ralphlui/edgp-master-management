@@ -27,8 +27,6 @@ public class CSVParser {
 	    // Convert camelCase or PascalCase to snake_case
 	    cleaned = cleaned.replaceAll("([a-z])([A-Z])", "$1_$2");
 
-	    // Lowercase everything
-	    cleaned = cleaned.toLowerCase();
 
 	    return cleaned;
 	}

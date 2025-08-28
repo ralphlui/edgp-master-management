@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility;
 
 @RequiredArgsConstructor
 @Service
@@ -34,15 +35,13 @@ public class StagingDataService {
 
         final int MAX_BATCH = 25;
         List<WriteRequest> batch = new ArrayList<>(MAX_BATCH);
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String uploadedDate = LocalDateTime.now(ZoneId.of("Asia/Singapore")).format(fmt);
-
+       
         for (Map<String, String> src : csvRows) {
             Map<String, AttributeValue> item = new LinkedHashMap<>();
  
             for (var e : src.entrySet()) {
                 var av = toAttributeValue(e.getValue());
-                if (av != null) item.put(e.getKey().trim().toLowerCase(), av);
+                if (av != null) item.put(e.getKey().trim(), av);
             }
             String id = java.util.UUID.randomUUID().toString();
             item.put("id", avS(id));
@@ -51,7 +50,7 @@ public class StagingDataService {
             item.put("domain_name", avS(domainName.trim()));
             item.put("file_id", avS(fileId));
             item.put("uploaded_by", avS(uploadedBy));
-            item.put("uploaded_date", avS(uploadedDate));
+            item.put("uploaded_date", avS(GeneralUtility.nowSgt()));
             item.put("is_processed", avN("0"));
             item.put("is_handled", avN("0"));
 

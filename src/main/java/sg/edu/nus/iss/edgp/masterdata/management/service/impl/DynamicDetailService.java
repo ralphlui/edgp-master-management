@@ -52,7 +52,7 @@ public class DynamicDetailService implements IDynamicDetailService {
 		}
 
 		for (Map.Entry<String, String> entry : rawData.entrySet()) {
-			String column = entry.getKey().toLowerCase().trim();
+			String column = entry.getKey().trim();
 			String value = entry.getValue();
 
 			if (column == null || column.trim().isEmpty())
