@@ -63,7 +63,7 @@ public class MasterdataService implements IMasterdataService {
 	private static final Logger logger = LoggerFactory.getLogger(MasterdataService.class);
 
 	private final DynamoDbClient dynamoDbClient;
-	private final CSVParser csvParser;
+	 
 	private final JWTService jwtService;
 	private final DynamicDetailService dynamoService;
 	private final HeaderService headerService;
@@ -76,11 +76,11 @@ public class MasterdataService implements IMasterdataService {
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
 
 		try {
-			List<Map<String, String>> rows = csvParser.parseCsv(file);
-
+			List<LinkedHashMap<String, Object>> rows = CSVParser.parseCsvObjects(file);
 			if (rows.isEmpty()) {
-				return new UploadResult("CSV is empty.", 0, Collections.emptyList());
+			    return new UploadResult("CSV is empty.", 0, Collections.emptyList());
 			}
+
 
 			String jwtToken = authorizationHeader.substring(7);
 			String uploadedBy = jwtService.extractUserEmailFromToken(jwtToken);
@@ -106,6 +106,7 @@ public class MasterdataService implements IMasterdataService {
 			if (!dynamoService.tableExists(stagingTableName.trim())) {
 				dynamoService.createTable(stagingTableName.trim());
 			}
+			
 
 			InsertionSummary summary = stagingDataService.insertToStaging(stagingTableName.trim(), rows, orgId,
 					masterReq.getPolicyId(), masterReq.getDomainName(), headerId, uploadedBy);
