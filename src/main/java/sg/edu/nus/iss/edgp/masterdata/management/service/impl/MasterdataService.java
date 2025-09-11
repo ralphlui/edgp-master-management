@@ -4,14 +4,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -36,6 +28,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IMasterdataService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility;
+import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility.BuiltUpdate;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -71,6 +64,7 @@ public class MasterdataService implements IMasterdataService {
 	private final StagingDataService stagingDataService;
 	private final PayloadBuilderService payloadBuilderService;
 	private final JSONReader jsonReader;
+	private final GeneralUtility generalUtility;
 
 	@Override
 	public UploadResult uploadCsvDataToTable(MultipartFile file, UploadRequest masterReq, String authorizationHeader) {
@@ -566,17 +560,23 @@ public class MasterdataService implements IMasterdataService {
 	}
 
 	@Override
-	public UploadResult updateDataToTable(Map<String, Object> data) {
-        // 1) Task Tracker id
-        if (data == null || !data.containsKey("id")) {
-            return new UploadResult("Missing 'id' field in request.", 0, List.of());
+	public UploadResult updateDataToTable(Map<String, Object> request) {
+		
+		
+		if (request == null || request.isEmpty()) {
+            return new UploadResult("Request body is required.", 0, List.of());
         }
+        Object dataObj = request.get("data");
+        if (!(dataObj instanceof Map)) {
+            return new UploadResult("'data' must be an object.", 0, List.of());
+        }
+        Map<String, Object> data = (Map<String, Object>) dataObj;
         
-        if (data == null || !data.containsKey("file_id")) {
-            return new UploadResult("Missing 'file id' field in request.", 0, List.of());
-        }
+        final String stgId = String.valueOf(data.get("id"));
+		 
+        // 1) Task Tracker id
+       /*
         final String workflowId = String.valueOf(data.get("id"));
-        final String fileId=String.valueOf(data.get("file_id"));
         
 
         // 2) Lookup staging id from tracker table
@@ -592,18 +592,26 @@ public class MasterdataService implements IMasterdataService {
                 || mappingResp.item().get("staging_id").s().isEmpty()) {
             return new UploadResult("Data not found for id: " + workflowId, 0, List.of());
         }
-        final String stgId = mappingResp.item().get("staging_id").s();
         
+        final String stgId = mappingResp.item().get("staging_id").s();
+        final String fileId=mappingResp.item().get("file_id").s();
+        */
          
         // 3) Read current staging + header items
         Map<String, AttributeValue> stagingKey = Map.of("id", AttributeValue.builder().s(stgId).build());
-        Map<String, AttributeValue> headerKey  = Map.of("id", AttributeValue.builder().s(fileId).build());
-
+       
         GetItemResponse getStg = dynamoDbClient.getItem(GetItemRequest.builder()
                 .tableName(stagingTableName.trim())
                 .key(stagingKey)
                 .consistentRead(true)
                 .build());
+        if (!getStg.hasItem() || getStg.item().isEmpty()) {
+            return new UploadResult("Staging item not found for Id: " + stgId, 0, List.of());
+        }
+        
+        final String fileId=getStg.item().get("file_id").s();
+        Map<String, AttributeValue> headerKey  = Map.of("id", AttributeValue.builder().s(fileId).build());
+
 
         GetItemResponse getHdr = dynamoDbClient.getItem(GetItemRequest.builder()
                 .tableName(headerTableName.trim())
@@ -611,27 +619,25 @@ public class MasterdataService implements IMasterdataService {
                 .consistentRead(true)
                 .build());
 
-        if (!getStg.hasItem() || getStg.item().isEmpty()) {
-            return new UploadResult("Staging item not found for Id: " + stgId, 0, List.of());
-        }
+        
         if (!getHdr.hasItem() || getHdr.item().isEmpty()) {
-            return new UploadResult("Header item not found for Id: " + workflowId, 0, List.of());
+            return new UploadResult("Header item not found for Id: " + stgId, 0, List.of());
         }
 
         Map<String, AttributeValue> stgCurrent = getStg.item();
         Map<String, AttributeValue> hdrCurrent = getHdr.item();
 
         // 4) Build updates
-        BuiltUpdate stgUpd = buildStagingUpdateParts(data, stgCurrent);
-        BuiltUpdate hdrUpd = buildHeaderUpdateParts(data, hdrCurrent);
+        BuiltUpdate stgUpd = generalUtility.buildStagingUpdateParts(data, stgCurrent);
+        BuiltUpdate hdrUpd = generalUtility.buildHeaderUpdateParts(data, hdrCurrent);
 
         if (stgUpd.setParts.isEmpty() && hdrUpd.setParts.isEmpty()) {
             return new UploadResult("No changes applied (both header & staging identical).",
-                    0, List.of(fromAttrMap(hdrCurrent), fromAttrMap(stgCurrent)));
+                    0, List.of(GeneralUtility.fromAttrMap(hdrCurrent), GeneralUtility.fromAttrMap(stgCurrent)));
         }
 
         // 5) Update STAGING first
-        Map<String, Object> stgBefore = fromAttrMap(stgCurrent);
+        Map<String, Object> stgBefore = GeneralUtility.fromAttrMap(stgCurrent);
         boolean stagingUpdated = false;
         try {
             if (!stgUpd.setParts.isEmpty()) {
@@ -639,7 +645,7 @@ public class MasterdataService implements IMasterdataService {
                         .tableName(stagingTableName.trim())
                         .key(stagingKey)
                         .updateExpression("SET " + String.join(", ", stgUpd.setParts))
-                        .expressionAttributeNames(merge(stgUpd.ean, Map.of("#k", "id")))
+                        .expressionAttributeNames(GeneralUtility.merge(stgUpd.ean, Map.of("#k", "id")))
                         .expressionAttributeValues(stgUpd.eav)
                         .conditionExpression("attribute_exists(#k)")
                         .returnValues(ReturnValue.ALL_NEW)
@@ -649,7 +655,7 @@ public class MasterdataService implements IMasterdataService {
             }
         } catch (Exception e) {
             return new UploadResult("Failed to update staging: " + e.getMessage(), 0,
-                    List.of(fromAttrMap(hdrCurrent), stgBefore));
+                    List.of(GeneralUtility.fromAttrMap(hdrCurrent), stgBefore));
         }
 
         // 6) Update HEADER
@@ -659,7 +665,7 @@ public class MasterdataService implements IMasterdataService {
                         .tableName(headerTableName.trim())
                         .key(headerKey)
                         .updateExpression("SET " + String.join(", ", hdrUpd.setParts))
-                        .expressionAttributeNames(merge(hdrUpd.ean, Map.of("#k", "id")))
+                        .expressionAttributeNames(GeneralUtility.merge(hdrUpd.ean, Map.of("#k", "id")))
                         .expressionAttributeValues(hdrUpd.eav)
                         .conditionExpression("attribute_exists(#k)")
                         .returnValues(ReturnValue.ALL_NEW)
@@ -670,7 +676,7 @@ public class MasterdataService implements IMasterdataService {
             // 7) rollback of staging if header failed
             if (stagingUpdated) {
                 try {
-                    BuiltUpdate rollback = buildRollbackFromSnapshot(stgBefore, stgCurrent);
+                    BuiltUpdate rollback = generalUtility.buildRollbackFromSnapshot(stgBefore, stgCurrent);
                     if (!rollback.setParts.isEmpty()) {
                         dynamoDbClient.updateItem(UpdateItemRequest.builder()
                                 .tableName(stagingTableName.trim())
@@ -684,7 +690,7 @@ public class MasterdataService implements IMasterdataService {
                 } catch (Exception ignore) { /* rollback errors */ }
             }
             return new UploadResult("Failed to update header: " + e.getMessage(), 0,
-                    List.of(fromAttrMap(hdrCurrent), fromAttrMap(stgCurrent)));
+                    List.of(GeneralUtility.fromAttrMap(hdrCurrent), GeneralUtility.fromAttrMap(stgCurrent)));
         }
 
         // 8) Read updated data for response
@@ -701,220 +707,14 @@ public class MasterdataService implements IMasterdataService {
         return new UploadResult(
                 "Data updated successfully.",
                 1,
-                List.of(fromAttrMap(stgNew))
+                List.of(GeneralUtility.fromAttrMap(stgNew))
         );
     }
 
     
    
-    private BuiltUpdate buildStagingUpdateParts(Map<String, Object> payload,
-                                                Map<String, AttributeValue> current) {
-        Map<String, String> ean = new LinkedHashMap<>();
-        Map<String, AttributeValue> eav = new LinkedHashMap<>();
-        List<String> setParts = new ArrayList<>();
-        int updatedFields = 0;
-        int idx = 0;
-
-        
-        for (Map.Entry<String, Object> entry : payload.entrySet()) {
-            String field = entry.getKey();
-            if ("id".equals(field)) continue;
-            if (!current.containsKey(field)) continue;
-            Object raw = entry.getValue();
-            if (raw == null) continue;
-
-            AttributeValue target = toAttr(raw);
-            AttributeValue existing = current.get(field);
-            if (equalsAttr(existing, target)) continue;
-
-            String n = "#n" + idx, v = ":v" + idx;
-            ean.put(n, field); eav.put(v, target);
-            setParts.add(n + " = " + v);
-            updatedFields++; idx++;
-        }
-
-        // Resets (only if attribute exists)
-        if (current.containsKey("processed_at")) {
-            ean.put("#processed_at", "processed_at");
-            eav.put(":processedEmpty", AttributeValue.builder().s("").build());
-            setParts.add("#processed_at = :processedEmpty"); updatedFields++;
-        }
-        if (current.containsKey("is_processed")) {
-            ean.put("#is_processed", "is_processed");
-            eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
-            setParts.add("#is_processed = :zeroProcessed"); updatedFields++;
-        }
-        if (current.containsKey("claimed_at")) {
-            ean.put("#claimed_at", "claimed_at");
-            eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
-            setParts.add("#claimed_at = :claimedEmpty"); updatedFields++;
-        }
-        if (current.containsKey("is_handled")) {
-            ean.put("#is_handled", "is_handled");
-            eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
-            setParts.add("#is_handled = :zeroHandled"); updatedFields++;
-        }
-        if (current.containsKey("updated_date")) {
-            ean.put("#updated_date", "updated_date");
-            eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
-            setParts.add("#updated_date = :now"); updatedFields++;
-        }
-
-        return new BuiltUpdate(ean, eav, setParts, updatedFields);
-    }
-
-    private BuiltUpdate buildHeaderUpdateParts(Map<String, Object> payload,
-                                               Map<String, AttributeValue> current) {
-        Map<String, String> ean = new LinkedHashMap<>();
-        Map<String, AttributeValue> eav = new LinkedHashMap<>();
-        List<String> setParts = new ArrayList<>();
-      
-        int updatedFields = 0;
-        int idx = 0;
-
-        
-        for (Map.Entry<String, Object> entry : payload.entrySet()) {
-            String field = entry.getKey();
-            if ("id".equals(field)) continue;
-            if (!current.containsKey(field)) continue;
-            Object raw = entry.getValue();
-            if (raw == null) continue;
-
-            AttributeValue target = toAttr(raw);
-            AttributeValue existing = current.get(field);
-            if (equalsAttr(existing, target)) continue;
-
-            String n = "#n" + idx, v = ":v" + idx;
-            ean.put(n, field); eav.put(v, target);
-            setParts.add(n + " = " + v);
-            updatedFields++; idx++;
-        }
-
-        // Resets (only if attribute exists)
-        if (current.containsKey("file_status")) {
-            ean.put("#file_status", "file_status");
-            eav.put(":fileStatusEmpty", AttributeValue.builder().s("").build());
-            setParts.add("#file_status = :fileStatusEmpty"); updatedFields++;
-        }
-        if (current.containsKey("is_processed")) {
-            ean.put("#is_processed", "is_processed");
-            eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
-            setParts.add("#is_processed = :zeroProcessed"); updatedFields++;
-        }
-        if (current.containsKey("process_stage")) {
-            ean.put("#process_stage", "process_stage");
-            eav.put(":processStageEmpty", AttributeValue.builder().s(FileProcessStage.UNPROCESSED.toString()).build());
-            setParts.add("#process_stage = :processStageEmpty"); updatedFields++;
-        }
-        if (current.containsKey("updated_date")) {
-            ean.put("#updated_date", "updated_date");
-            eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
-            setParts.add("#updated_date = :now"); updatedFields++;
-        }
-
-        return new BuiltUpdate(ean, eav, setParts, updatedFields);
-    }
-
     
-    private BuiltUpdate buildRollbackFromSnapshot(Map<String, Object> before,
-                                                  Map<String, AttributeValue> afterAttrs) {
-        Map<String, String> ean = new LinkedHashMap<>();
-        Map<String, AttributeValue> eav = new LinkedHashMap<>();
-        List<String> setParts = new ArrayList<>();
-        int idx = 0;
-
-        Map<String, Object> after = fromAttrMap(afterAttrs);
-
-        for (Map.Entry<String, Object> e : before.entrySet()) {
-            String field = e.getKey();
-            if ("id".equals(field)) continue;
-
-            Object beforeVal = e.getValue();
-            Object afterVal  = after.get(field);
-
-            if (Objects.equals(beforeVal, afterVal)) continue;
-
-            String n = "#rbn" + idx, v = ":rbv" + idx;
-            ean.put(n, field);
-            eav.put(v, toAttr(beforeVal));
-            setParts.add(n + " = " + v);
-            idx++;
-        }
-        return new BuiltUpdate(ean, eav, setParts, idx);
-    }
- 
-    private static Map<String, String> merge(Map<String, String> a, Map<String, String> b) {
-        Map<String, String> m = new LinkedHashMap<>(a);
-        m.putAll(b);
-        return m;
-    }
-
-    private AttributeValue toAttr(Object v) {
-        if (v == null) return AttributeValue.builder().nul(true).build();
-        if (v instanceof Number)  return AttributeValue.builder().n(String.valueOf(v)).build();
-        if (v instanceof Boolean) return AttributeValue.builder().bool((Boolean) v).build();
-        if (v instanceof Map)     return AttributeValue.builder().m(
-                ((Map<?, ?>) v).entrySet().stream()
-                        .collect(Collectors.toMap(
-                                e -> String.valueOf(e.getKey()),
-                                e -> toAttr(e.getValue())
-                        ))
-        ).build();
-        if (v instanceof List)    return AttributeValue.builder().l(
-                ((List<?>) v).stream().map(this::toAttr).collect(Collectors.toList())
-        ).build();
-        return AttributeValue.builder().s(String.valueOf(v)).build();
-    }
-
-    private boolean equalsAttr(AttributeValue a, AttributeValue b) {
-        if (a == null && b == null) return true;
-        if (a == null || b == null) return false;
-        if (a.s() != null || b.s() != null)   return Objects.equals(a.s(), b.s());
-        if (a.n() != null || b.n() != null)   return Objects.equals(a.n(), b.n());
-        if (a.bool() != null || b.bool() != null) return Objects.equals(a.bool(), b.bool());
-        if (a.hasM() || b.hasM())             return Objects.equals(a.m(), b.m());
-        if (a.hasL() || b.hasL())             return Objects.equals(a.l(), b.l());
-        if (a.nul() != null || b.nul() != null) return Objects.equals(a.nul(), b.nul());
-        if (a.hasSs() || b.hasSs())           return Objects.equals(a.ss(), b.ss());
-        if (a.hasNs() || b.hasNs())           return Objects.equals(a.ns(), b.ns());
-        if (a.hasBs() || b.hasBs())           return Objects.equals(a.bs(), b.bs());
-        return a.equals(b);
-    }
-
-    private Map<String, Object> fromAttrMap(Map<String, AttributeValue> attrs) {
-        Map<String, Object> out = new LinkedHashMap<>();
-        attrs.forEach((k, v) -> out.put(k, fromAttr(v)));
-        return out;
-    }
-
-    private Object fromAttr(AttributeValue a) {
-        if (a.s() != null) return a.s();
-        if (a.n() != null) return new BigDecimal(a.n());
-        if (a.bool() != null) return a.bool();
-        if (a.hasM()) {
-            return a.m().entrySet().stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, e -> fromAttr(e.getValue())));
-        }
-        if (a.hasL()) {
-            List<Object> list = new ArrayList<>();
-            for (AttributeValue av : a.l()) list.add(fromAttr(av));
-            return list;
-        }
-        if (a.nul() != null && a.nul()) return null;
-        if (a.hasSs()) return new HashSet<>(a.ss());
-        if (a.hasNs()) return new HashSet<>(a.ns());
-        if (a.hasBs()) return new HashSet<>(a.bs());
-        return null;
-    }
-
-   
     
-    @lombok.Value
-    private static class BuiltUpdate {
-        Map<String, String> ean;
-        Map<String, AttributeValue> eav;
-        List<String>setParts;
-        int updatedFields;
-    }
+    
 
 }

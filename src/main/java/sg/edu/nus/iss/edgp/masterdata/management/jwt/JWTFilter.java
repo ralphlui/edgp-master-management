@@ -58,7 +58,12 @@ public class JWTFilter extends OncePerRequestFilter {
 		}
 
 		String jwtToken = authHeader.substring(7); // Remove "Bearer " prefix
-	
+		String apiKey = jwtService.extractAPIKeyFromToken(jwtToken);
+		
+		if (apiKey != null && !apiKey.isEmpty()) {
+			filterChain.doFilter(request, response);
+			return;
+		}
 
 		if (SecurityContextHolder.getContext().getAuthentication() == null && !jwtToken.isEmpty()) {
 			try {
@@ -88,6 +93,7 @@ public class JWTFilter extends OncePerRequestFilter {
 			
 			
 		}
+		
 
 		filterChain.doFilter(request, response);
 	}

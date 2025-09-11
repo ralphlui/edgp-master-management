@@ -2,6 +2,7 @@ package sg.edu.nus.iss.edgp.masterdata.management.controller;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -20,6 +22,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.APIResponse;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.AuditDTO;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
+import sg.edu.nus.iss.edgp.masterdata.management.dto.ValidationResult;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.AuditLogInvalidUser;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.HTTPVerb;
 import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
@@ -32,7 +36,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.utility.IngestRequest;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/data/ingest/")
+@RequestMapping("/api/mdm/data/ingest")
 @Validated
 public class DataIngestController {
 
@@ -46,14 +50,13 @@ public class DataIngestController {
 	private static final String LOG_MESSAGE_FORMAT = "{} {}";
 
 	private final AuditService auditService;
-	private final DomainService domainService;
 	private final DataUploadValidation dataUploadValidation;
 	private final DataIngestService dataIngestService;
 
-	@PutMapping(value = "/create", produces = "application/json")
-	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	@PostMapping(value = "", produces = "application/json")
+	//@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>> createData(
-			@RequestHeader("Authorization") String authorizationHeader, @Valid @RequestBody IngestRequest request) {
+			@RequestHeader("Authorization") String authorizationHeader,@RequestBody Map<String, Object> data) {
 
 		final String activityType = "Update Master Data";
 
@@ -64,14 +67,16 @@ public class DataIngestController {
 				httpMethod);
 
 		try {
-
-			if (request.items().isEmpty()) {
-				message = "PayLoad is required.";
-				auditService.logAudit(auditDTO, 400, message, authorizationHeader);
-				return ResponseEntity.status(400).body(APIResponse.error(message));
+			ValidationResult validResult = dataUploadValidation.isValidToUpsert(data,true);
+			if(!validResult.isValid()) {
+				message = validResult.getMessage();
+				auditService.logAudit(auditDTO,  400, message, authorizationHeader);
+				return ResponseEntity.status(validResult.getStatus()).body(APIResponse.error(message));
 
 			}
-			DataIngestResult result = dataIngestService.processIngest(request,authorizationHeader);
+
+
+			UploadResult result = dataIngestService.processIngest(data, authorizationHeader);
 			if (result.getTotalRecord() < 1) {
 				message = result.getMessage();
 				auditService.logAudit(auditDTO, 500, message, authorizationHeader);
@@ -79,8 +84,8 @@ public class DataIngestController {
 
 			}
 
-			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData(result.getMessage()));
-		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result.getData(), result.getMessage(), result.getTotalRecord()));
+		}  catch (Exception e) {
 
 			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
 
@@ -92,9 +97,9 @@ public class DataIngestController {
 	}
 
 	@PutMapping(value = "/update", produces = "application/json")
-	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	//@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>> updateData(
-			@RequestHeader("Authorization") String authorizationHeader, @Valid @RequestBody IngestRequest request) {
+			@RequestHeader("Authorization") String authorizationHeader, @RequestBody Map<String, Object> data) {
 
 		final String activityType = "Update Master Data";
 
@@ -105,13 +110,17 @@ public class DataIngestController {
 				httpMethod);
 
 		try {
-			if (request.items().isEmpty()) {
-				message = "PayLoad is required.";
-				auditService.logAudit(auditDTO, 400, message, authorizationHeader);
-				return ResponseEntity.status(400).body(APIResponse.error(message));
+ 
+			
+			ValidationResult validResult = dataUploadValidation.isValidToUpsert(data,false);
+			if(!validResult.isValid()) {
+				message = validResult.getMessage();
+				auditService.logAudit(auditDTO,  400, message, authorizationHeader);
+				return ResponseEntity.status(validResult.getStatus()).body(APIResponse.error(message));
 
 			}
-			DataIngestResult result = dataIngestService.processIngest(request,authorizationHeader);
+
+			UploadResult result = dataIngestService.updateDataToTable(data, authorizationHeader);
 			if (result.getTotalRecord() < 1) {
 				message = result.getMessage();
 				auditService.logAudit(auditDTO, 500, message, authorizationHeader);
@@ -119,8 +128,8 @@ public class DataIngestController {
 
 			}
 
-			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.successWithNoData(result.getMessage()));
-		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.OK).body(APIResponse.success(result.getData(), result.getMessage(), result.getTotalRecord()));
+		}  catch (Exception e) {
 
 			message = e instanceof MasterdataServiceException ? e.getMessage() : UNEXPECTED_ERROR;
 

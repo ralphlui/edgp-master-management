@@ -199,7 +199,7 @@ public class MasterdataController {
 				httpMethod);
 
 		try {
-			ValidationResult validResult = dataUploadValidation.isValidToUpdate(data);
+			ValidationResult validResult = dataUploadValidation.isValidToUpsert(data,false);
 			if(!validResult.isValid()) {
 				message = validResult.getMessage();
 				auditService.logAudit(auditDTO,  400, message, authorizationHeader);
