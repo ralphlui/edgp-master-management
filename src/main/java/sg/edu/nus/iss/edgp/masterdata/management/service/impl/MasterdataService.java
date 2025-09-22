@@ -414,6 +414,7 @@ public class MasterdataService implements IMasterdataService {
 									item.put("uploaded_by", AttributeValue.builder().s(uploadedBy).build());
 									item.put("final_status", AttributeValue.builder().s("").build());
 									item.put("rule_status", AttributeValue.builder().s("").build());
+									item.put("dataquality_status", AttributeValue.builder().s("").build());
 									item.put("failed_validations",
 											AttributeValue.builder().l(Collections.emptyList()).build());
 
