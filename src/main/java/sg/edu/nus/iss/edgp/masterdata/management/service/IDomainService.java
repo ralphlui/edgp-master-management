@@ -6,4 +6,7 @@ import java.util.List;
 public interface IDomainService {
 
 	List<String> findDomains();
+	
+	boolean createDomain(String domainName);
+	
 }
