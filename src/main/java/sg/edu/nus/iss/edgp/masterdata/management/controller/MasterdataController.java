@@ -185,7 +185,7 @@ public class MasterdataController {
 	}
 	
 	@PutMapping(value = "/update", produces = "application/json")
-	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_view:policy')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>>  updateData(
 			@RequestHeader("Authorization") String authorizationHeader,
 			@RequestBody Map<String, Object> data) {

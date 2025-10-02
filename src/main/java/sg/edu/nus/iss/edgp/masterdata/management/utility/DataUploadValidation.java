@@ -159,22 +159,23 @@ public class DataUploadValidation {
 	    return r;
 	}
 	
-	private static Map<String, Object> unwrapData(Map<String, Object> envelope) {
-	    if (envelope == null) return Map.of();
-	    Object d = envelope.get("data");
-	    if (d == null) return Map.of();
+	@SuppressWarnings("unchecked")
+	private Map<String, Object> unwrapData(Map<String, Object> request) {
+	    if (request == null) return java.util.Collections.emptyMap();
 
-	    if (d instanceof Map<?, ?> m) {
+	    Object data = request.get("data");
+	    if (data instanceof Map<?, ?> m) {
 	        return (Map<String, Object>) m;
 	    }
-	    if (d instanceof String s) {
+	    if (data instanceof String s) {
+	        // If someone sent "data" as a JSON string, try parse it
 	        try {
-	            return new ObjectMapper().readValue(s, new TypeReference<Map<String, Object>>() {});
-	        } catch (Exception e) {
-	            // not valid JSON string; fall through
-	        }
+	            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+	                s, new com.fasterxml.jackson.core.type.TypeReference<Map<String,Object>>() {});
+	        } catch (Exception ignore) { /* fall through to return request */ }
 	    }
-	    return Map.of();
+
+	    return request;
 	}
 
 	

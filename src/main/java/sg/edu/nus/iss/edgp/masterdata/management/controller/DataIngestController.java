@@ -54,7 +54,7 @@ public class DataIngestController {
 	private final DataIngestService dataIngestService;
 
 	@PostMapping(value = "", produces = "application/json")
-	//@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_view:policy')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>> createData(
 			@RequestHeader("Authorization") String authorizationHeader,@RequestBody Map<String, Object> data) {
 
@@ -97,7 +97,7 @@ public class DataIngestController {
 	}
 
 	@PutMapping(value = "/update", produces = "application/json")
-	//@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_manage:mdm')")
+	@PreAuthorize("hasAuthority('SCOPE_manage:mdm') or hasAuthority('SCOPE_view:policy')")
 	public ResponseEntity<APIResponse<List<Map<String, Object>>>> updateData(
 			@RequestHeader("Authorization") String authorizationHeader, @RequestBody Map<String, Object> data) {
 

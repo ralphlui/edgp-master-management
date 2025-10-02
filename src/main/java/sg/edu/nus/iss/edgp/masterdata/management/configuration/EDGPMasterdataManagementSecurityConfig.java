@@ -19,6 +19,8 @@ import org.springframework.security.web.header.writers.HstsHeaderWriter;
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.web.cors.CorsConfiguration;
 
+import sg.edu.nus.iss.edgp.masterdata.management.exception.CustomAccessDeniedHandler;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.CustomAuthenticationEntryPoint;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTFilter;
 
 
@@ -46,7 +48,9 @@ public class EDGPMasterdataManagementSecurityConfig {
 
 
 	@Bean
-	public SecurityFilterChain securityFilterChain(HttpSecurity http, JWTFilter jwtFilter) throws Exception {
+	public SecurityFilterChain securityFilterChain(HttpSecurity http, JWTFilter jwtFilter,
+			 CustomAccessDeniedHandler accessDeniedHandler,
+             CustomAuthenticationEntryPoint authEntryPoint) throws Exception {
 		return http.cors(cors -> {
 			cors.configurationSource(request -> {
 				CorsConfiguration config = new CorsConfiguration();
@@ -72,6 +76,8 @@ public class EDGPMasterdataManagementSecurityConfig {
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.oauth2ResourceServer(oauth2 -> oauth2
 						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+						.authenticationEntryPoint(authEntryPoint)       // <---
+			            .accessDeniedHandler(accessDeniedHandler)
 					)
 				.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class).build();
 	}
