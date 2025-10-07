@@ -21,6 +21,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
 import sg.edu.nus.iss.edgp.masterdata.management.enums.FileProcessStage;
+import sg.edu.nus.iss.edgp.masterdata.management.exception.MasterdataServiceException;
 import sg.edu.nus.iss.edgp.masterdata.management.jwt.JWTService;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.PolicyData;
@@ -40,6 +41,8 @@ import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
 import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 @ExtendWith(MockitoExtension.class)
 public class MasterdataServiceTest {
@@ -328,5 +331,254 @@ public class MasterdataServiceTest {
         assertEquals("Staging item not found for Id: STG-1", res.getMessage());
         assertEquals(0, res.getTotalRecord());
     }
+
+
+    @Test
+    void getDataByPolicyId_happy_scanAndMap() {
+        when(dynamoService.tableExists("md_staging")).thenReturn(true);
+        when(jwtService.extractUserEmailFromToken("tok")).thenReturn("u@x.com");
+
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("id", AttributeValue.builder().s("ID1").build());
+        item.put("policy_id", AttributeValue.builder().s("POL1").build());
+        item.put("uploaded_by", AttributeValue.builder().s("u@x.com").build());
+        item.put("organization_id", AttributeValue.builder().s("ORG1").build());
+
+       
+        item.put("process_stage",
+            AttributeValue.builder().s(FileProcessStage.PROCESSING.toString()).build());
+
+        when(dynamoDbClient.scan(any(ScanRequest.class)))
+            .thenReturn(ScanResponse.builder().items(item).build());
+
+        PolicyData pdata = mock(PolicyData.class);
+        when(pdata.getPolicyName()).thenReturn("Customer Policy");
+        PolicyRoot proot = mock(PolicyRoot.class);
+        when(proot.getData()).thenReturn(pdata);
+        when(jsonReader.getValidationRules(eq("POL1"), eq("Bearer tok"))).thenReturn(proot);
+        when(jsonReader.getOrganizationName(eq("ORG1"), eq("Bearer tok"))).thenReturn("Acme Org");
+
+        SearchRequest req = new SearchRequest();
+        req.setPolicyId("POL1");
+
+        List<Map<String, Object>> out = svc.getDataByPolicyId(req, "Bearer tok");
+        Map<String, Object> row = out.get(0);
+
+        assertEquals(FileProcessStage.PROCESSING.toString(), row.get("process_stage"));
+    }
+
+
+    @Test
+    void getDataByDomainName_happy_scanAndMap() {
+        when(dynamoService.tableExists("md_staging")).thenReturn(true);
+        when(jwtService.extractUserEmailFromToken("tok")).thenReturn("u@x.com");
+
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("id", AttributeValue.builder().s("IDD").build());
+        item.put("domain_name", AttributeValue.builder().s("supplier").build());
+        item.put("uploaded_by", AttributeValue.builder().s("u@x.com").build());
+        item.put("policy_id", AttributeValue.builder().s("POL-D").build());
+        item.put("organization_id", AttributeValue.builder().s("ORG-D").build());
+        item.put("process_stage", AttributeValue.builder().s(FileProcessStage.UNPROCESSED.toString()).build());
+
+        when(dynamoDbClient.scan(any(ScanRequest.class)))
+                .thenReturn(ScanResponse.builder().items(item).build());
+
+        // enrich
+        PolicyRoot pr = mock(PolicyRoot.class);
+        PolicyData pd = mock(PolicyData.class);
+        when(pr.getData()).thenReturn(pd);
+        when(pd.getPolicyName()).thenReturn("Domain Policy");
+        when(jsonReader.getValidationRules("POL-D", "Bearer tok")).thenReturn(pr);
+        when(jsonReader.getOrganizationName("ORG-D", "Bearer tok")).thenReturn("Org D");
+
+        SearchRequest req = new SearchRequest();
+        req.setDomainName("supplier");
+
+        List<Map<String, Object>> out = svc.getDataByDomainName(req, "Bearer tok");
+        assertEquals(1, out.size());
+        Map<String, Object> row = out.get(0);
+        assertEquals("IDD", row.get("id"));
+        assertEquals("supplier", row.get("domain_name"));
+        assertEquals("Domain Policy", ((Map<?,?>) row.get("policy")).get("name"));
+        assertEquals("Org D", ((Map<?,?>) row.get("organization")).get("name"));
+    }
+
+    @Test
+    void getDataByFileId_happy_scanAndMap() {
+        when(dynamoService.tableExists("md_staging")).thenReturn(true);
+        when(jwtService.extractUserEmailFromToken("tok")).thenReturn("u@x.com");
+
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("id", AttributeValue.builder().s("IDF").build());
+        item.put("file_id", AttributeValue.builder().s("FILE-9").build());
+        item.put("uploaded_by", AttributeValue.builder().s("u@x.com").build());
+        item.put("policy_id", AttributeValue.builder().s("POL-F").build());
+        item.put("organization_id", AttributeValue.builder().s("ORG-F").build());
+        item.put("process_stage", AttributeValue.builder().s(FileProcessStage.PROCESSING.toString()).build());
+
+        when(dynamoDbClient.scan(any(ScanRequest.class)))
+                .thenReturn(ScanResponse.builder().items(item).build());
+
+        // enrich
+        PolicyRoot pr = mock(PolicyRoot.class);
+        PolicyData pd = mock(PolicyData.class);
+        when(pr.getData()).thenReturn(pd);
+        when(pd.getPolicyName()).thenReturn("File Policy");
+        when(jsonReader.getValidationRules("POL-F", "Bearer tok")).thenReturn(pr);
+        when(jsonReader.getOrganizationName("ORG-F", "Bearer tok")).thenReturn("Org F");
+
+        SearchRequest req = new SearchRequest();
+        req.setFileId("FILE-9");
+
+        List<Map<String, Object>> out = svc.getDataByFileId(req, "Bearer tok");
+        assertEquals(1, out.size());
+        Map<String, Object> row = out.get(0);
+        assertEquals("IDF", row.get("id"));
+        assertEquals("File Policy", ((Map<?,?>) row.get("policy")).get("name"));
+        assertEquals("Org F", ((Map<?,?>) row.get("organization")).get("name"));
+    }
+
+    @Test
+    void processAndSendRawDataToSqs_headerMissingFields_throws() {
+        MasterDataHeader bad = new MasterDataHeader();
+        bad.setId("F1");
+        bad.setPolicyId("POL");
+        bad.setDomainName("customer");
+        bad.setUploadedBy("");
+        bad.setOrganizationId("ORG");
+        bad.setTotalRowsCount(1);
+
+        when(headerService.fetchOldestByStage(FileProcessStage.UNPROCESSED))
+                .thenReturn(Optional.of(bad));
+
+        MasterdataServiceException ex = assertThrows(
+                MasterdataServiceException.class,
+                () -> svc.processAndSendRawDataToSqs());
+        assertTrue(ex.getMessage().startsWith("Process and send data to SQS failed: Missing header info"));
+    }
+
+
+    @Test
+    void updateDataToTable_noChanges_returnsNoChangesMessage() {
+       
+        MasterdataService realSvc = new MasterdataService(
+                dynamoDbClient, jwtService, dynamoService, headerService,
+                sqsPublishingService, stagingDataService, payloadBuilderService, jsonReader,
+                new GeneralUtility()
+        );
+        ReflectionTestUtils.setField(realSvc, "headerTableName", "md_header");
+        ReflectionTestUtils.setField(realSvc, "stagingTableName", "md_staging");
+        ReflectionTestUtils.setField(realSvc, "mdataTaskTrackerTable", "md_tracker");
+
+        Map<String, AttributeValue> stg = new LinkedHashMap<>();
+        stg.put("id", AttributeValue.builder().s("STG-1").build());
+        stg.put("file_id", AttributeValue.builder().s("F-1").build());
+
+        Map<String, AttributeValue> hdr = new LinkedHashMap<>();
+        hdr.put("id", AttributeValue.builder().s("F-1").build());
+        hdr.put("file_name", AttributeValue.builder().s("data.csv").build());
+
+        when(dynamoDbClient.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(stg).build())
+                .thenReturn(GetItemResponse.builder().item(hdr).build());
+
+        Map<String, Object> data = Map.of("id", "STG-1");
+        Map<String, Object> req = Map.of("data", data);
+
+        UploadResult res = realSvc.updateDataToTable(req);
+        assertEquals("No changes applied (both header & staging identical).", res.getMessage());
+        assertEquals(0, res.getTotalRecord());
+        assertEquals(2, res.getData().size());
+    }
+
+    @Test
+    void updateDataToTable_happy_updatesStagingOnly() {
+        MasterdataService realSvc = new MasterdataService(
+                dynamoDbClient, jwtService, dynamoService, headerService,
+                sqsPublishingService, stagingDataService, payloadBuilderService, jsonReader,
+                new GeneralUtility()
+        );
+        ReflectionTestUtils.setField(realSvc, "headerTableName", "md_header");
+        ReflectionTestUtils.setField(realSvc, "stagingTableName", "md_staging");
+        ReflectionTestUtils.setField(realSvc, "mdataTaskTrackerTable", "md_tracker");
+
+        Map<String, AttributeValue> stg = new LinkedHashMap<>();
+        stg.put("id", AttributeValue.builder().s("STG-1").build());
+        stg.put("file_id", AttributeValue.builder().s("F-1").build());
+        stg.put("col1", AttributeValue.builder().s("old").build());
+
+        Map<String, AttributeValue> hdr = new LinkedHashMap<>();
+        hdr.put("id", AttributeValue.builder().s("F-1").build());
+        hdr.put("file_name", AttributeValue.builder().s("data.csv").build());
+
+        Map<String, AttributeValue> stgAfter = new LinkedHashMap<>(stg);
+        stgAfter.put("col1", AttributeValue.builder().s("new").build());
+
+       
+        when(dynamoDbClient.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(stg).build())
+                .thenReturn(GetItemResponse.builder().item(hdr).build())
+                .thenReturn(GetItemResponse.builder().item(stgAfter).build())
+                .thenReturn(GetItemResponse.builder().item(hdr).build());
+
+        when(dynamoDbClient.updateItem(any(UpdateItemRequest.class)))
+                .thenReturn(UpdateItemResponse.builder().attributes(stgAfter).build());
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", "STG-1");
+        data.put("col1", "new");
+        Map<String, Object> req = Map.of("data", data);
+
+        UploadResult res = realSvc.updateDataToTable(req);
+
+        assertEquals("Data updated successfully.", res.getMessage());
+        assertEquals(1, res.getTotalRecord());
+        assertEquals("new", ((Map<?, ?>) res.getData().get(0)).get("col1"));
+
+       
+        verify(dynamoDbClient, times(1)).updateItem(any(UpdateItemRequest.class));
+    }
+
+
+    @Test
+    void updateDataToTable_stagingUpdateFails_returnsError() {
+        MasterdataService realSvc = new MasterdataService(
+                dynamoDbClient, jwtService, dynamoService, headerService,
+                sqsPublishingService, stagingDataService, payloadBuilderService, jsonReader,
+                new GeneralUtility()
+        );
+        ReflectionTestUtils.setField(realSvc, "headerTableName", "md_header");
+        ReflectionTestUtils.setField(realSvc, "stagingTableName", "md_staging");
+        ReflectionTestUtils.setField(realSvc, "mdataTaskTrackerTable", "md_tracker");
+
+        Map<String, AttributeValue> stg = new LinkedHashMap<>();
+        stg.put("id", AttributeValue.builder().s("STG-1").build());
+        stg.put("file_id", AttributeValue.builder().s("F-1").build());
+        stg.put("col1", AttributeValue.builder().s("old").build());
+
+        Map<String, AttributeValue> hdr = new LinkedHashMap<>();
+        hdr.put("id", AttributeValue.builder().s("F-1").build());
+        hdr.put("file_name", AttributeValue.builder().s("data.csv").build());
+
+        when(dynamoDbClient.getItem(any(GetItemRequest.class)))
+                .thenReturn(GetItemResponse.builder().item(stg).build())
+                .thenReturn(GetItemResponse.builder().item(hdr).build());
+
+     
+        when(dynamoDbClient.updateItem(any(UpdateItemRequest.class)))
+                .thenThrow(new RuntimeException("boom"));
+
+        Map<String, Object> data = new HashMap<>();
+        data.put("id", "STG-1");
+        data.put("col1", "new");
+        Map<String, Object> req = Map.of("data", data);
+
+        UploadResult res = realSvc.updateDataToTable(req);
+        assertTrue(res.getMessage().startsWith("Failed to update staging:"));
+       
+        assertEquals(2, res.getData().size());
+    }
+
 }
 
