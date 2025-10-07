@@ -16,7 +16,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.pojo.DataIngestResult;
 import sg.edu.nus.iss.edgp.masterdata.management.pojo.MasterDataHeader;
 import sg.edu.nus.iss.edgp.masterdata.management.service.IDataIngestService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.IngestRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
 
 import java.time.Instant;

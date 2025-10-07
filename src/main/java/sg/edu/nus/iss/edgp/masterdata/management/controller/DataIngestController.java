@@ -32,7 +32,6 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.AuditService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DataIngestService;
 import sg.edu.nus.iss.edgp.masterdata.management.service.impl.DomainService;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.DataUploadValidation;
-import sg.edu.nus.iss.edgp.masterdata.management.utility.IngestRequest;
 
 @RestController
 @RequiredArgsConstructor
