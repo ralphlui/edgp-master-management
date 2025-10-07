@@ -1,75 +1,150 @@
 package sg.edu.nus.iss.edgp.masterdata.management.api.connector;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentMatchers;
-import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.MockedStatic;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
+@ExtendWith(MockitoExtension.class)
 class AdminAPICallTest {
-	
-	private AdminAPICall adminAPICall;
 
-	@Mock
-	private HttpClient httpClient;
+    private AdminAPICall svc;
 
-	@Mock
-	private HttpResponse<String> httpResponse;
+    @BeforeEach
+    void setUp() {
+        svc = new AdminAPICall();
+       
+        ReflectionTestUtils.setField(svc, "adminURL", "   https://api.example.com   ");
+    }
 
-	@Mock
-	private HttpClient httpClientMock;
+    
 
-	@Mock
-	private HttpResponse<String> httpResponseMock;
+    @Test
+    void validateActiveUser_success_buildsRequestCorrectly_andReturnsBody() throws Exception {
+        String userId = "U-123";
+        String auth = "Bearer abc";
+        String expectedUrl = "https://api.example.com/users/profile";
 
-	@BeforeEach
-	void setUp() {
-		MockitoAnnotations.openMocks(this);
-		adminAPICall = new AdminAPICall();
+        HttpClient.Builder builder = mock(HttpClient.Builder.class);
+        HttpClient client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<String> response = (HttpResponse<String>) mock(HttpResponse.class);
 
-		try {
-			java.lang.reflect.Field field = AdminAPICall.class.getDeclaredField("adminURL");
-			field.setAccessible(true);
-			field.set(adminAPICall, "http://fake-auth-url.com/");
-		} catch (Exception e) {
-			throw new RuntimeException(e);
-		}
-	}
+        try (MockedStatic<HttpClient> http = mockStatic(HttpClient.class)) {
+            http.when(HttpClient::newBuilder).thenReturn(builder);
+            when(builder.connectTimeout(Duration.ofSeconds(30))).thenReturn(builder);
+            when(builder.build()).thenReturn(client);
 
-	@Test
-	void testValidateActiveUser_ExceptionHandling() throws Exception {
-		when(httpClient.send(any(HttpRequest.class), ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
-				.thenThrow(new RuntimeException("Connection error"));
+            when(response.body()).thenReturn("{\"ok\":true}");
 
-		String result = adminAPICall.validateActiveUser("user123", "Bearer xyz");
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<HttpRequest> reqCap = ArgumentCaptor.forClass(HttpRequest.class);
+            when(client.send(reqCap.capture(), any(HttpResponse.BodyHandler.class)))
+                    .thenReturn(response);
 
-		assertEquals("", result);
-	}
+            String body = svc.validateActiveUser(userId, auth);
 
-	@Test
-	void testHttpClientSendReturnsExpectedResponse() throws Exception {
-		String expectedResponseBody = "{\"status\":\"active\"}";
+            assertEquals("{\"ok\":true}", body);
 
-		when(httpResponseMock.body()).thenReturn(expectedResponseBody);
+            HttpRequest sent = reqCap.getValue();
+            assertEquals(expectedUrl, sent.uri().toString());
+            assertEquals("GET", sent.method());
+            assertTrue(sent.timeout().isPresent());
+            assertEquals(Duration.ofSeconds(30), sent.timeout().get());
 
-		when(httpClientMock.send(any(HttpRequest.class), Mockito.<HttpResponse.BodyHandler<String>>any()))
-				.thenReturn(httpResponseMock);
+            assertEquals(auth, sent.headers().firstValue("Authorization").orElse(null));
+            assertEquals(userId, sent.headers().firstValue("X-User-Id").orElse(null));
+            assertEquals("application/json", sent.headers().firstValue("Content-Type").orElse(null));
+        }
+    }
 
-		HttpRequest request = HttpRequest.newBuilder().uri(new java.net.URI("http://example.com")).GET().build();
+    @Test
+    void validateActiveUser_whenClientThrows_returnsEmptyString() throws Exception {
+        ReflectionTestUtils.setField(svc, "adminURL", "http://localhost");
 
-		HttpResponse<String> response = httpClientMock.send(request, HttpResponse.BodyHandlers.ofString());
-		String actualBody = response.body();
+        HttpClient.Builder builder = mock(HttpClient.Builder.class);
+        HttpClient client = mock(HttpClient.class);
 
-		assertEquals(expectedResponseBody, actualBody);
-	}
+        try (MockedStatic<HttpClient> http = mockStatic(HttpClient.class)) {
+            http.when(HttpClient::newBuilder).thenReturn(builder);
+            when(builder.connectTimeout(Duration.ofSeconds(30))).thenReturn(builder);
+            when(builder.build()).thenReturn(client);
 
+            when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                    .thenThrow(new java.io.IOException("boom"));
+
+            String body = svc.validateActiveUser("U-1", "Bearer t");
+            assertEquals("", body);
+        }
+    }
+
+    // -------- getAccessToken --------
+
+    @Test
+    void getAccessToken_success_buildsRequestCorrectly_andReturnsBody() throws Exception {
+        String email = "user@example.com";
+        String expectedUrl = "https://api.example.com/users/accessToken";
+
+        HttpClient.Builder builder = mock(HttpClient.Builder.class);
+        HttpClient client = mock(HttpClient.class);
+        @SuppressWarnings("unchecked")
+        HttpResponse<String> response = (HttpResponse<String>) mock(HttpResponse.class);
+
+        try (MockedStatic<HttpClient> http = mockStatic(HttpClient.class)) {
+            http.when(HttpClient::newBuilder).thenReturn(builder);
+            when(builder.connectTimeout(Duration.ofSeconds(30))).thenReturn(builder);
+            when(builder.build()).thenReturn(client);
+
+            when(response.body()).thenReturn("{\"token\":\"abc\"}");
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<HttpRequest> reqCap = ArgumentCaptor.forClass(HttpRequest.class);
+            when(client.send(reqCap.capture(), any(HttpResponse.BodyHandler.class)))
+                    .thenReturn(response);
+
+            String body = svc.getAccessToken(email);
+
+            assertEquals("{\"token\":\"abc\"}", body);
+
+            HttpRequest sent = reqCap.getValue();
+            assertEquals(expectedUrl, sent.uri().toString());
+            assertEquals("GET", sent.method());
+            assertTrue(sent.timeout().isPresent());
+            assertEquals(Duration.ofSeconds(30), sent.timeout().get());
+
+            assertEquals(email, sent.headers().firstValue("X-User-Email").orElse(null));
+            assertEquals("application/json", sent.headers().firstValue("Content-Type").orElse(null));
+        }
+    }
+
+    @Test
+    void getAccessToken_whenClientThrows_returnsEmptyString() throws Exception {
+        ReflectionTestUtils.setField(svc, "adminURL", "http://localhost");
+
+        HttpClient.Builder builder = mock(HttpClient.Builder.class);
+        HttpClient client = mock(HttpClient.class);
+
+        try (MockedStatic<HttpClient> http = mockStatic(HttpClient.class)) {
+            http.when(HttpClient::newBuilder).thenReturn(builder);
+            when(builder.connectTimeout(Duration.ofSeconds(30))).thenReturn(builder);
+            when(builder.build()).thenReturn(client);
+
+            when(client.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class)))
+                    .thenThrow(new java.io.IOException("boom"));
+
+            String body = svc.getAccessToken("user@example.com");
+            assertEquals("", body);
+        }
+    }
 }

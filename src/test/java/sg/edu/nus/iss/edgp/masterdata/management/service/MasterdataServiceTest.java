@@ -1,4 +1,4 @@
-package sg.edu.nus.iss.edgp.masterdata.management.aws.service;
+package sg.edu.nus.iss.edgp.masterdata.management.service;
 
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -15,6 +15,8 @@ import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.multipart.MultipartFile;
+
+import sg.edu.nus.iss.edgp.masterdata.management.aws.service.SQSPublishingService;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.InsertionSummary;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.SearchRequest;
 import sg.edu.nus.iss.edgp.masterdata.management.dto.UploadResult;
@@ -246,8 +248,8 @@ public class MasterdataServiceTest {
     }
 
     @Test
-    void processAndSendRawDataToSqs_happyPath_sendsAllAndUpdates() throws Exception {
-       
+    void processAndSendRawDataToSqs_happyPath_sendsAllAndUpdates_noUnnecessaryStubs() throws Exception {
+        // Header: all required fields present
         MasterDataHeader hdr = new MasterDataHeader();
         hdr.setId("F-1");
         hdr.setPolicyId("POLX");
@@ -255,62 +257,52 @@ public class MasterdataServiceTest {
         hdr.setUploadedBy("user@x.com");
         hdr.setOrganizationId("ORG9");
         hdr.setTotalRowsCount(2);
-
         when(headerService.fetchOldestByStage(FileProcessStage.UNPROCESSED))
                 .thenReturn(Optional.of(hdr));
 
-        
+       
         Map<String, AttributeValue> rec1 = new LinkedHashMap<>();
         rec1.put("id", AttributeValue.builder().s("S1").build());
         Map<String, AttributeValue> rec2 = new LinkedHashMap<>();
         rec2.put("id", AttributeValue.builder().s("S2").build());
 
-        when(dynamoService.getUnprocessedRecordsByFileId("md_staging", "F-1", "POLX", "customer"))
-                .thenReturn(List.of(rec1, rec2));
+        when(dynamoService.getUnprocessedRecordsByFileId(
+                anyString(), eq("F-1"), eq("POLX"), eq("customer")))
+            .thenReturn(List.of(rec1, rec2));
+
+         
+        when(dynamoService.tableExists(anyString())).thenReturn(true);
+ 
+        when(dynamoService.claimStagingRow(anyString(), eq("S1"))).thenReturn(true);
+        when(dynamoService.claimStagingRow(anyString(), eq("S2"))).thenReturn(true);
 
         
-        when(dynamoService.tableExists("md_tracker")).thenReturn(true);
-
-        
-        when(dynamoService.claimStagingRow("md_staging", "S1")).thenReturn(true);
-        when(dynamoService.claimStagingRow("md_staging", "S2")).thenReturn(true);
-
-   
         when(jsonReader.getAccessToken("user@x.com")).thenReturn("atoken");
 
         PolicyRoot proot = mock(PolicyRoot.class);
         PolicyData pdata = mock(PolicyData.class);
-        
         when(proot.getData()).thenReturn(pdata);
-        when(pdata.getRules()).thenReturn(Collections.emptyList()); // no NPE in for-each
+        when(pdata.getRules()).thenReturn(Collections.emptyList()); // only what's used
 
         when(jsonReader.getValidationRules("POLX", "Bearer atoken")).thenReturn(proot);
-
-        
         when(payloadBuilderService.build(any(), anyMap(), anyList())).thenReturn("{json}");
 
         
-        final int[] sends = {0};
-        doAnswer(inv -> { sends[0]++; return null; })
-                .when(sqsPublishingService).sendRecordToQueue(anyString());
-
         int processed = svc.processAndSendRawDataToSqs();
 
         assertEquals(2, processed);
-        assertEquals(2, sends[0]);
-
-         
+ 
+        verify(sqsPublishingService, times(2)).sendRecordToQueue("{json}");
+        verify(dynamoService, times(2)).insertValidatedMasterData(anyString(), anyMap());
         verify(headerService, atLeastOnce()).updateFileStage("F-1", FileProcessStage.PROCESSING);
-        verify(dynamoService, times(2)).insertValidatedMasterData(eq("md_tracker"), anyMap());
-        verify(dynamoService).markProcessed("md_staging", "S1");
-        verify(dynamoService).markProcessed("md_staging", "S2");
+        verify(dynamoService).markProcessed(anyString(), eq("S1"));
+        verify(dynamoService).markProcessed(anyString(), eq("S2"));
+        verify(dynamoService).updateStagingProcessedStatus(anyString(), eq("F-1"), eq("1"));
 
         
-        verify(dynamoService).updateStagingProcessedStatus("md_header", "F-1", "1");
-
-       
-        verify(dynamoService, never()).createTable("md_tracker");
+        verify(dynamoService, never()).createTable(anyString());
     }
+
 
  
 
