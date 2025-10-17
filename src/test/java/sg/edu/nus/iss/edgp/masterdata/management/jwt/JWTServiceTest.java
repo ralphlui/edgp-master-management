@@ -290,5 +290,117 @@ public class JWTServiceTest {
             assertEquals("not active", ex.getMessage());
         }
     }
+    
+ 
+
+    @Test
+    void extractSubject_happy() throws Exception {
+        String token = "tok";
+        Claims claims = mock(Claims.class);
+        when(claims.getSubject()).thenReturn("SUB-123");
+
+        try (MockedStatic<Jwts> ignored = stubJwtClaims(token, claims)) {
+            assertEquals("SUB-123", svc.extractSubject(token));
+        }
+    }
+
+    @Test
+    void extractExpiration_happy() throws Exception {
+        String token = "tok";
+        Date exp = new Date(System.currentTimeMillis() + 60_000);
+        Claims claims = mock(Claims.class);
+        when(claims.getExpiration()).thenReturn(exp);
+
+        try (MockedStatic<Jwts> ignored = stubJwtClaims(token, claims)) {
+            assertEquals(exp, svc.extractExpiration(token));
+        }
+    }
+
+    @Test
+    void isTokenExpired_true_whenPastDate_false_whenFutureDate() throws Exception {
+        String token = "tok";
+         
+        Claims past = mock(Claims.class);
+        when(past.getExpiration()).thenReturn(new Date(System.currentTimeMillis() - 1_000));
+
+        
+        Claims future = mock(Claims.class);
+        when(future.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 86_400_000));
+
+        try (MockedStatic<Jwts> jwts = mockStatic(Jwts.class)) {
+            JwtParserBuilder builder = mock(JwtParserBuilder.class);
+            JwtParser parser = mock(JwtParser.class);
+            @SuppressWarnings("unchecked") Jws<Claims> jwsPast = (Jws<Claims>) mock(Jws.class);
+            @SuppressWarnings("unchecked") Jws<Claims> jwsFuture = (Jws<Claims>) mock(Jws.class);
+            RSAPublicKey pk = mock(RSAPublicKey.class);
+
+            when(jwtConfig.loadPublicKey()).thenReturn(pk);
+            jwts.when(Jwts::parser).thenReturn(builder);
+            when(builder.verifyWith(pk)).thenReturn(builder);
+            when(builder.build()).thenReturn(parser);
+            // First call returns past, second call returns future
+            when(parser.parseSignedClaims(token)).thenReturn(jwsPast, jwsFuture);
+            when(jwsPast.getPayload()).thenReturn(past);
+            when(jwsFuture.getPayload()).thenReturn(future);
+
+            assertTrue(svc.isTokenExpired(token));   // past
+            assertFalse(svc.isTokenExpired(token));  // future
+        }
+    }
+
+    @Test
+    void extractUserNameFromToken_happy_and_expired() throws Exception {
+        String token = "tok";
+
+         
+        Claims claims = mock(Claims.class);
+        when(claims.get("userName", String.class)).thenReturn("alice");
+        try (MockedStatic<Jwts> ignored = stubJwtClaims(token, claims)) {
+            assertEquals("alice", svc.extractUserNameFromToken(token));
+        }
+
+      
+        Claims expClaims = mock(Claims.class);
+        when(expClaims.get("userName", String.class)).thenReturn("old-alice");
+        ExpiredJwtException ex = mock(ExpiredJwtException.class);
+        when(ex.getClaims()).thenReturn(expClaims);
+        try (MockedStatic<Jwts> ignored = stubJwtThrows(token, ex)) {
+            assertEquals("old-alice", svc.extractUserNameFromToken(token));
+        }
+    }
+
+    @Test
+    void retrieveUserName_happy_and_expired() throws Exception {
+        String token = "tok";
+
+      
+        Claims claims = mock(Claims.class);
+        when(claims.get("userName", String.class)).thenReturn("bob");
+        try (MockedStatic<Jwts> ignored = stubJwtClaims(token, claims)) {
+            assertEquals("bob", svc.retrieveUserName(token));
+        }
+
+        
+        Claims expClaims = mock(Claims.class);
+        when(expClaims.get("userName", String.class)).thenReturn("old-bob");
+        ExpiredJwtException ex = mock(ExpiredJwtException.class);
+        when(ex.getClaims()).thenReturn(expClaims);
+        try (MockedStatic<Jwts> ignored = stubJwtThrows(token, ex)) {
+            assertEquals("old-bob", svc.retrieveUserName(token));
+        }
+    }
+
+    @Test
+    void extractClaim_withCustomResolver() throws Exception {
+        String token = "tok";
+        Claims claims = mock(Claims.class);
+        when(claims.get("custom", String.class)).thenReturn("C-VAL");
+
+        try (MockedStatic<Jwts> ignored = stubJwtClaims(token, claims)) {
+            String out = svc.extractClaim(token, c -> c.get("custom", String.class));
+            assertEquals("C-VAL", out);
+        }
+    }
+
 }
 
