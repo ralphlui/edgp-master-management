@@ -58,7 +58,7 @@ public class StagingDataService {
 	        putS(item, "id", id);
 	        putS(item, "organization_id", trimOrEmpty(organizationId));
 	        putS(item, "policy_id", trimOrEmpty(policyId));
-	        putS(item, "domain_name", domainName.trim());
+	        putS(item, "domain_name", domainName.trim().toLowerCase());
 	        putS(item, "file_id", trimOrEmpty(fileId));
 	        putS(item, "uploaded_by", trimOrEmpty(uploadedBy));
 	        putS(item, "uploaded_date", GeneralUtility.nowSgt());

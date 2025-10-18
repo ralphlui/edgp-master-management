@@ -83,9 +83,9 @@ public class MasterdataService implements IMasterdataService {
 			String fileName = file.getOriginalFilename();
 			String headerId = UUID.randomUUID().toString();
 			MasterDataHeader header = new MasterDataHeader();
-			header.setFileName(fileName);
+			header.setFileName(fileName.trim().toLowerCase());
 			header.setId(headerId);
-			header.setDomainName(masterReq.getDomainName().trim());
+			header.setDomainName(masterReq.getDomainName().trim().toLowerCase());
 			header.setOrganizationId(orgId.trim());
 			header.setPolicyId(masterReq.getPolicyId().trim());
 			header.setUploadedBy(uploadedBy);
