@@ -85,8 +85,8 @@ public class DataIngestService implements IDataIngestService {
 	        String headerId = UUID.randomUUID().toString();
 	        MasterDataHeader header = new MasterDataHeader();
 	        header.setId(headerId);
-	        header.setFileName("Data Ingest Workflow");
-	        header.setDomainName(domainName);
+	        header.setFileName("data ingest workflow");
+	        header.setDomainName(domainName.trim().toLowerCase());
 	        header.setOrganizationId(orgId);
 	        header.setPolicyId(policyId);
 	        header.setUploadedBy(uploadedBy);
