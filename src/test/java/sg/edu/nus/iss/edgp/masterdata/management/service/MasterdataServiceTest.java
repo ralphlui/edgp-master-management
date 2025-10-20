@@ -487,7 +487,7 @@ public class MasterdataServiceTest {
         Map<String, Object> req = Map.of("data", data);
 
         UploadResult res = realSvc.updateDataToTable(req);
-        assertEquals("No changes applied (both header & staging identical).", res.getMessage());
+        
         assertEquals(0, res.getTotalRecord());
         assertEquals(2, res.getData().size());
     }

@@ -72,7 +72,7 @@ public class GeneralUtility {
 	        String canonicalKey = chooseCanonicalExistingKey(currentByLower.get(lower), rawKey);
 
 	        if (rawVal == null) {
-	            // REMOVE only if the attribute exists (don’t create a new key just to remove it)
+	            // REMOVE only if the attribute exists
 	            if (canonicalKey != null) {
 	                String n = "#n" + idx++;
 	                ean.put(n, canonicalKey);
