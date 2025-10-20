@@ -4,6 +4,8 @@ package sg.edu.nus.iss.edgp.masterdata.management.service;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.util.*; 
 
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +37,7 @@ import sg.edu.nus.iss.edgp.masterdata.management.service.impl.StagingDataService
 import sg.edu.nus.iss.edgp.masterdata.management.utility.CSVParser;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.GeneralUtility;
 import sg.edu.nus.iss.edgp.masterdata.management.utility.JSONReader;
+import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
@@ -56,11 +59,14 @@ public class MasterdataServiceTest {
     private PayloadBuilderService payloadBuilderService;
     private JSONReader jsonReader;
     private GeneralUtility generalUtility;
-
+    private static Method avToJava;
+    private Method mapItemsBK;
     private MasterdataService svc;
+    
+    
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws NoSuchMethodException, SecurityException {
         dynamoDbClient = mock(DynamoDbClient.class);
         jwtService = mock(JWTService.class);
         dynamoService = mock(DynamicDetailService.class);
@@ -87,6 +93,12 @@ public class MasterdataServiceTest {
         ReflectionTestUtils.setField(svc, "headerTableName", "md_header");
         ReflectionTestUtils.setField(svc, "stagingTableName", "md_staging");
         ReflectionTestUtils.setField(svc, "mdataTaskTrackerTable", "md_tracker");
+        avToJava = MasterdataService.class.getDeclaredMethod("avToJava", AttributeValue.class);
+        avToJava.setAccessible(true);
+        mapItemsBK = MasterdataService.class.getDeclaredMethod(
+                "mapItemsBK", List.class
+        );
+        mapItemsBK.setAccessible(true);
     }
 
     @Test
@@ -579,6 +591,384 @@ public class MasterdataServiceTest {
        
         assertEquals(2, res.getData().size());
     }
+    
+    @Test
+    void getDataByPolicyId_tableMissing_returnsEmpty() {
+        // given
+        when(dynamoService.tableExists("md_staging")).thenReturn(false);
+
+        SearchRequest req = new SearchRequest();
+        req.setPolicyId("POL1");
+
+        // when
+        List<Map<String, Object>> out = svc.getDataByPolicyId(req, "Bearer tok");
+
+        // then
+        assertTrue(out.isEmpty());
+        verifyNoInteractions(dynamoDbClient);
+    }
+    
+    @Test
+    void getDataByPolicyId_happy_scansAndMaps_enrichesPolicyAndOrg_setsFileStatus() {
+        
+        when(dynamoService.tableExists("md_staging")).thenReturn(true);
+     
+        when(jwtService.extractUserEmailFromToken("tok")).thenReturn("u@x.com");
+
+       
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("id", AttributeValue.builder().s("ROW-1").build());
+        item.put("policy_id", AttributeValue.builder().s("POL1").build());
+        item.put("uploaded_by", AttributeValue.builder().s("u@x.com").build());
+        item.put("organization_id", AttributeValue.builder().s("ORG1").build());
+        item.put("process_stage", AttributeValue.builder().s(FileProcessStage.UNPROCESSED.toString()).build());
+
+        when(dynamoDbClient.scan(any(ScanRequest.class)))
+                .thenReturn(ScanResponse.builder().items(item).build());
+ 
+        PolicyData pdata = mock(PolicyData.class);
+        when(pdata.getPolicyName()).thenReturn("Customer Policy");
+        PolicyRoot proot = mock(PolicyRoot.class);
+        when(proot.getData()).thenReturn(pdata);
+         
+        when(jsonReader.getValidationRules("POL1", "Bearer tok")).thenReturn(proot);
+        when(jsonReader.getOrganizationName("ORG1", "Bearer tok")).thenReturn("Acme Org");
+
+        SearchRequest req = new SearchRequest();
+        req.setPolicyId("POL1");
+
+        
+        List<Map<String, Object>> out = svc.getDataByPolicyId(req, "Bearer tok");
+
+      
+        assertEquals(1, out.size());
+        Map<String, Object> row = out.get(0);
+
+         
+        assertEquals("ROW-1", row.get("id"));
+        assertEquals("POL1", ((Map<?, ?>) row.get("policy")).get("id"));
+       
+        assertEquals("Customer Policy", ((Map<?, ?>) row.get("policy")).get("name"));
+        assertEquals("ORG1", ((Map<?, ?>) row.get("organization")).get("id"));
+        assertEquals("Acme Org", ((Map<?, ?>) row.get("organization")).get("name"));
+       
+
+         
+        ArgumentCaptor<ScanRequest> captor = ArgumentCaptor.forClass(ScanRequest.class);
+        verify(dynamoDbClient).scan(captor.capture());
+        ScanRequest built = captor.getValue();
+        assertEquals("md_staging", built.tableName());
+        assertTrue(built.filterExpression().contains("policy_id = :policyId"));
+        assertTrue(built.filterExpression().contains("uploaded_by = :uploaded_by"));
+        assertEquals("POL1", built.expressionAttributeValues().get(":policyId").s());
+        assertEquals("u@x.com", built.expressionAttributeValues().get(":uploaded_by").s());
+    }
+    
+    
+
+    // small helper to invoke the private static method
+    private Object convert(AttributeValue v) {
+        try {
+            return avToJava.invoke(null, v);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Test
+    void returnsNull_whenInputIsNull() {
+        assertNull(convert(null));
+    }
+
+    @Test
+    void convertsStringS() {
+        AttributeValue v = AttributeValue.builder().s("hello").build();
+        assertEquals("hello", convert(v));
+    }
+
+    @Test
+    void convertsNumberN_toBigDecimal() {
+        AttributeValue v = AttributeValue.builder().n("123.45").build();
+        Object out = convert(v);
+        assertTrue(out instanceof BigDecimal);
+        assertEquals(new BigDecimal("123.45"), out);
+    }
+
+    @Test
+    void convertsBool() {
+        AttributeValue vTrue = AttributeValue.builder().bool(true).build();
+        AttributeValue vFalse = AttributeValue.builder().bool(false).build();
+        assertEquals(true, convert(vTrue));
+        assertEquals(false, convert(vFalse));
+    }
+
+    @Test
+    void respectsNullType() {
+        AttributeValue v = AttributeValue.builder().nul(true).build();
+        assertNull(convert(v));
+    }
+
+    @Test
+    void convertsStringSetSS_toList() {
+        AttributeValue v = AttributeValue.builder().ss("a", "b", "c").build();
+        Object out = convert(v);
+        assertTrue(out instanceof List);
+        assertEquals(List.of("a", "b", "c"), out);
+    }
+
+    @Test
+    void emptySS_returnsNull() {
+        AttributeValue v = AttributeValue.builder().ss(new ArrayList<>()).build();
+        assertNull(convert(v));
+    }
+
+    @Test
+    void convertsNumberSetNS_toListOfBigDecimal() {
+        AttributeValue v = AttributeValue.builder().ns("1", "2.5", "3").build();
+        Object out = convert(v);
+        assertTrue(out instanceof List<?>);
+        assertEquals(List.of(new BigDecimal("1"), new BigDecimal("2.5"), new BigDecimal("3")), out);
+    }
+
+    @Test
+    void emptyNS_returnsNull() {
+        AttributeValue v = AttributeValue.builder().ns(new ArrayList<>()).build();
+        assertNull(convert(v));
+    }
+
+    @Test
+    void convertsBinarySetBS() {
+        SdkBytes b1 = SdkBytes.fromByteArray(new byte[]{1, 2});
+        SdkBytes b2 = SdkBytes.fromByteArray(new byte[]{3});
+        AttributeValue v = AttributeValue.builder().bs(b1, b2).build();
+        Object out = convert(v);
+        assertTrue(out instanceof List<?>);
+        @SuppressWarnings("unchecked")
+        List<SdkBytes> bytes = (List<SdkBytes>) out;
+        assertEquals(2, bytes.size());
+        assertArrayEquals(new byte[]{1,2}, bytes.get(0).asByteArray());
+        assertArrayEquals(new byte[]{3}, bytes.get(1).asByteArray());
+    }
+
+    @Test
+    void emptyBS_returnsNull() {
+        AttributeValue v = AttributeValue.builder().bs(new ArrayList<>()).build();
+        assertNull(convert(v));
+    }
+
+    @Test
+    void convertsListL_withNestedValues() {
+        AttributeValue l = AttributeValue.builder().l(
+                AttributeValue.builder().s("A").build(),
+                AttributeValue.builder().n("42").build(),
+                AttributeValue.builder().bool(true).build(),
+                AttributeValue.builder().m(Map.of(
+                        "k", AttributeValue.builder().s("v").build()
+                )).build(),
+                AttributeValue.builder().l(
+                        AttributeValue.builder().s("inner").build()
+                ).build()
+        ).build();
+
+        Object out = convert(l);
+        assertTrue(out instanceof List<?>);
+        List<?> list = (List<?>) out;
+
+        assertEquals("A", list.get(0));
+        assertEquals(new BigDecimal("42"), list.get(1));
+        assertEquals(true, list.get(2));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> innerMap = (Map<String, Object>) list.get(3);
+        assertEquals("v", innerMap.get("k"));
+
+        @SuppressWarnings("unchecked")
+        List<Object> innerList = (List<Object>) list.get(4);
+        assertEquals(List.of("inner"), innerList);
+    }
+
+    @Test
+    void emptyL_returnsNull() {
+        AttributeValue v = AttributeValue.builder().l(new ArrayList<>()).build();
+        assertNull(convert(v));
+    }
+
+    @Test
+    void convertsMapM_withNestedValues() {
+        AttributeValue nested = AttributeValue.builder().m(Map.of(
+                "innerKey", AttributeValue.builder().n("9").build()
+        )).build();
+
+        AttributeValue v = AttributeValue.builder().m(Map.of(
+                "s", AttributeValue.builder().s("str").build(),
+                "n", AttributeValue.builder().n("10").build(),
+                "b", AttributeValue.builder().bool(false).build(),
+                "l", AttributeValue.builder().l(AttributeValue.builder().s("x").build()).build(),
+                "m", nested
+        )).build();
+
+        Object out = convert(v);
+        assertTrue(out instanceof Map<?,?>);
+        @SuppressWarnings("unchecked")
+        Map<String,Object> map = (Map<String, Object>) out;
+
+        assertEquals("str", map.get("s"));
+        assertEquals(new BigDecimal("10"), map.get("n"));
+        assertEquals(false, map.get("b"));
+        assertEquals(List.of("x"), map.get("l"));
+
+        @SuppressWarnings("unchecked")
+        Map<String,Object> inner = (Map<String, Object>) map.get("m");
+        assertEquals(new BigDecimal("9"), inner.get("innerKey"));
+    }
+
+    @Test
+    void emptyM_returnsNull() {
+        AttributeValue v = AttributeValue.builder().m(new LinkedHashMap<>()).build();
+        assertNull(convert(v));
+    }
+
+ 
+
+    @Test
+    void getAllData_scansAndMaps_enrichesPolicyAndOrg_setsFileStatus() {
+       
+        when(jwtService.extractUserEmailFromToken("tok")).thenReturn("u@x.com");
+        when(dynamoService.tableExists("md_staging")).thenReturn(true);
+
+        
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("id", AttributeValue.builder().s("ROW-ALL-1").build());
+        item.put("uploaded_by", AttributeValue.builder().s("u@x.com").build());
+        item.put("policy_id", AttributeValue.builder().s("POL-ALL").build());
+        item.put("organization_id", AttributeValue.builder().s("ORG-ALL").build());
+        item.put("process_stage", AttributeValue.builder().s(FileProcessStage.UNPROCESSED.toString()).build());
+
+        when(dynamoDbClient.scan(any(ScanRequest.class)))
+                .thenReturn(ScanResponse.builder().items(item).build());
+
+        PolicyData pdata = mock(PolicyData.class);
+        when(pdata.getPolicyName()).thenReturn("All Data Policy");
+        PolicyRoot proot = mock(PolicyRoot.class);
+        when(proot.getData()).thenReturn(pdata);
+        when(jsonReader.getValidationRules("POL-ALL", "Bearer tok")).thenReturn(proot);
+        when(jsonReader.getOrganizationName("ORG-ALL", "Bearer tok")).thenReturn("Org All");
+
+        List<Map<String, Object>> out = svc.getAllData("Bearer tok");
+
+        assertEquals(1, out.size());
+        Map<String, Object> row = out.get(0);
+
+        assertEquals("ROW-ALL-1", row.get("id"));
+
+        Map<?, ?> pol = (Map<?, ?>) row.get("policy");
+        assertEquals("POL-ALL", pol.get("id"));
+        assertEquals("All Data Policy", pol.get("name"));
+
+        Map<?, ?> org = (Map<?, ?>) row.get("organization");
+        assertEquals("ORG-ALL", org.get("id"));
+        assertEquals("Org All", org.get("name"));
+
+       
+
+        ArgumentCaptor<ScanRequest> captor = ArgumentCaptor.forClass(ScanRequest.class);
+        verify(dynamoDbClient).scan(captor.capture());
+        ScanRequest built = captor.getValue();
+        assertEquals("md_staging", built.tableName());
+        assertEquals("uploaded_by = :uploaded_by", built.filterExpression());
+        assertEquals("u@x.com", built.expressionAttributeValues().get(":uploaded_by").s());
+    }
+    
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> invoke(List<Map<String, AttributeValue>> items) {
+        try {
+            return (List<Map<String, Object>>) mapItemsBK.invoke(svc, items);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+    
+    @Test
+    void returnsEmpty_whenInputEmpty() {
+        List<Map<String, Object>> out = invoke(Collections.emptyList());
+        assertTrue(out.isEmpty());
+    }
+
+    @Test
+    void mapsAllSupportedAttributeTypes_andKeepsL_and_M_raw() {
+        // Build a DynamoDB item containing all branches
+        Map<String, AttributeValue> item = new LinkedHashMap<>();
+        item.put("s", AttributeValue.builder().s("hello").build());
+        item.put("n", AttributeValue.builder().n("123.45").build());
+        item.put("b", AttributeValue.builder().bool(true).build());
+
+        // L: stays as List<AttributeValue>
+        AttributeValue listVal = AttributeValue.builder().l(
+                AttributeValue.builder().s("A").build(),
+                AttributeValue.builder().n("7").build()
+        ).build();
+        item.put("l", listVal);
+
+        // M: stays as Map<String, AttributeValue>
+        AttributeValue mapVal = AttributeValue.builder().m(Map.of(
+                "k", AttributeValue.builder().s("v").build(),
+                "x", AttributeValue.builder().n("9").build()
+        )).build();
+        item.put("m", mapVal);
+
+        // Also include a BS to ensure it's ignored by this implementation (no branch for bs())
+        SdkBytes bs1 = SdkBytes.fromByteArray(new byte[]{1});
+        item.put("bsIgnored", AttributeValue.builder().bs(bs1).build());
+
+        List<Map<String, Object>> out = invoke(List.of(item));
+
+        assertEquals(1, out.size());
+        Map<String, Object> row = out.get(0);
+
+        // S -> String
+        assertEquals("hello", row.get("s"));
+        // N -> BigDecimal
+        assertEquals(new BigDecimal("123.45"), row.get("n"));
+        // BOOL -> Boolean
+        assertEquals(true, row.get("b"));
+
+        // L -> still List<AttributeValue>
+        Object l = row.get("l");
+        assertNotNull(l);
+        assertTrue(l instanceof List<?>);
+        @SuppressWarnings("unchecked")
+        List<AttributeValue> lCast = (List<AttributeValue>) l;
+        assertEquals("A", lCast.get(0).s());
+        assertEquals("7", lCast.get(1).n());
+
+        // M -> still Map<String, AttributeValue>
+        Object m = row.get("m");
+        assertNotNull(m);
+        assertTrue(m instanceof Map);
+        @SuppressWarnings("unchecked")
+        Map<String, AttributeValue> mCast = (Map<String, AttributeValue>) m;
+        assertEquals("v", mCast.get("k").s());
+        assertEquals("9", mCast.get("x").n());
+
+        // No branch for bs() in this method → not copied
+        assertFalse(row.containsKey("bsIgnored"));
+    }
+
+    @Test
+    void supportsMultipleItems() {
+        Map<String, AttributeValue> i1 = Map.of(
+                "s", AttributeValue.builder().s("one").build()
+        );
+        Map<String, AttributeValue> i2 = Map.of(
+                "n", AttributeValue.builder().n("2").build()
+        );
+
+        List<Map<String, Object>> out = invoke(List.of(i1, i2));
+        assertEquals(2, out.size());
+        assertEquals("one", out.get(0).get("s"));
+        assertEquals(new BigDecimal("2"), out.get(1).get("n"));
+    }
+
 
 }
 
