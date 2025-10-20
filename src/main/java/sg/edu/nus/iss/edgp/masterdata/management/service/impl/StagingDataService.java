@@ -19,6 +19,7 @@ public class StagingDataService {
 
 	private final DynamoDbClient dynamoDbClient;
 	
+	
 	public InsertionSummary insertToStaging(
 	        String stagingTableName,
 	        List<LinkedHashMap<String, Object>> rows,
@@ -33,6 +34,13 @@ public class StagingDataService {
 	        throw new IllegalArgumentException("domain_name is mandatory");
 	    }
 
+	    // Discover existing column names
+	    Set<String> existingKeys = getExistingAttributeKeys(stagingTableName);
+	    Map<String, String> existingByLower = new HashMap<>();
+	    for (String k : existingKeys) {
+	        existingByLower.put(k.toLowerCase(Locale.ROOT), k);
+	    }
+
 	    List<Map<String, Object>> top50Preview = new ArrayList<>(50);
 	    int total = 0;
 
@@ -42,18 +50,22 @@ public class StagingDataService {
 	    for (Map<String, Object> src : rows) {
 	        Map<String, AttributeValue> item = new LinkedHashMap<>();
 
-	       
+	        // ️Case-insensitive matching to existing keys
 	        for (var e : src.entrySet()) {
-	            String key = safeKey(e.getKey());
+	            String rawKey = safeKey(e.getKey());
+	            if (rawKey.isEmpty() || "id".equalsIgnoreCase(rawKey)) continue;
 	            Object val = e.getValue();
-	            if (key.isEmpty() || val == null) continue;
+	            if (val == null) continue;
+
+	            // If this key already exists in DynamoDB (any case), use the existing casing
+	            String lower = rawKey.toLowerCase(Locale.ROOT);
+	            String canonicalKey = existingByLower.getOrDefault(lower, rawKey);
 
 	            AttributeValue av = toAttr(val);
-	            if (av != null) {
-	                item.put(key, av);
-	            }
+	            if (av != null) item.put(canonicalKey, av);
 	        }
 
+	        //️ System fields (always canonical lowercase)
 	        String id = UUID.randomUUID().toString();
 	        putS(item, "id", id);
 	        putS(item, "organization_id", trimOrEmpty(organizationId));
@@ -65,12 +77,8 @@ public class StagingDataService {
 	        putN(item, "is_processed", "0");
 	        putN(item, "is_handled", "0");
 
-	      
-	        if (top50Preview.size() < 50) {
-	            top50Preview.add(toPlainMap(item));
-	        }
+	        if (top50Preview.size() < 50) top50Preview.add(toPlainMap(item));
 
-	       
 	        batch.add(WriteRequest.builder()
 	                .putRequest(PutRequest.builder().item(item).build())
 	                .build());
@@ -86,6 +94,50 @@ public class StagingDataService {
 
 	    return new InsertionSummary(total, top50Preview);
 	}
+
+	private Set<String> getExistingAttributeKeys(String tableName) {
+	    Set<String> keys = new HashSet<>();
+	    try {
+	        ScanRequest scanReq = ScanRequest.builder()
+	                .tableName(tableName)
+	                .limit(1)
+	                .build();
+	        ScanResponse res = dynamoDbClient.scan(scanReq);
+	        if (!res.items().isEmpty()) {
+	            keys.addAll(res.items().get(0).keySet());
+	        }
+	    } catch (Exception e) {
+	        // fallback to empty (new table)
+	    }
+	    return keys;
+	}
+
+
+	/**
+	 * Collapse a row's keys case-insensitively.
+	 * - Canonical key = lowercase (consistent for new items)
+	 * - If multiple keys differ only by case (Email/email), LAST non-null wins (change if you prefer first).
+	 * - Skips nulls (does not create the attribute).
+	 * - Skips source "id" (the caller will generate a new one).
+	 */
+	private Map<String, Object> canonicalizeRowKeysCaseInsensitive(Map<String, Object> row) {
+	    Map<String, Object> out = new LinkedHashMap<>();
+	    for (Map.Entry<String, Object> e : row.entrySet()) {
+	        String rawKey = e.getKey();
+	        if (rawKey == null) continue;
+	        if ("id".equalsIgnoreCase(rawKey)) continue; // we always generate our own id
+
+	        String lower = rawKey.toLowerCase(Locale.ROOT);
+	        Object val = e.getValue();
+
+	        // LAST non-null wins; switch to "if (!out.containsKey(lower))" for FIRST non-null wins
+	        if (val != null || !out.containsKey(lower)) {
+	            out.put(lower, val);
+	        }
+	    }
+	    return out;
+	}
+
 	
 	private static String trimOrEmpty(String s) { return (s == null) ? "" : s.trim(); }
 

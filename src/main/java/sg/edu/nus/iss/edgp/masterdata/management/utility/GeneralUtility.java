@@ -5,9 +5,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -46,69 +48,123 @@ public class GeneralUtility {
 	}
 
 	public BuiltUpdate buildStagingUpdateParts(Map<String, Object> payload, Map<String, AttributeValue> current) {
-		Map<String, String> ean = new LinkedHashMap<>();
-		Map<String, AttributeValue> eav = new LinkedHashMap<>();
-		List<String> setParts = new ArrayList<>();
-		int updatedFields = 0;
-		int idx = 0;
+	    Map<String, String> ean = new LinkedHashMap<>();
+	    Map<String, AttributeValue> eav = new LinkedHashMap<>();
+	    List<String> setParts = new ArrayList<>();
+	    List<String> removeParts = new ArrayList<>();
+	    int updatedFields = 0;
+	    int idx = 0;
 
-		for (Map.Entry<String, Object> entry : payload.entrySet()) {
-			String field = entry.getKey();
-			if ("id".equals(field))
-				continue;
-			if (!current.containsKey(field))
-				continue;
-			Object raw = entry.getValue();
-			if (raw == null)
-				continue;
+	    // Map lowercase -> list of existing keys (all case variants present in the item)
+	    Map<String, List<String>> currentByLower = new HashMap<>();
+	    for (String k : current.keySet()) {
+	        currentByLower.computeIfAbsent(k.toLowerCase(Locale.ROOT), _k -> new ArrayList<>()).add(k);
+	    }
 
-			AttributeValue target = toAttr(raw);
-			AttributeValue existing = current.get(field);
-			if (equalsAttr(existing, target))
-				continue;
+	    for (Map.Entry<String, Object> entry : payload.entrySet()) {
+	        String rawKey = entry.getKey();
+	        if ("id".equals(rawKey)) continue;
 
-			String n = "#n" + idx, v = ":v" + idx;
-			ean.put(n, field);
-			eav.put(v, target);
-			setParts.add(n + " = " + v);
-			updatedFields++;
-			idx++;
-		}
+	        Object rawVal = entry.getValue();
+	        String lower = rawKey.toLowerCase(Locale.ROOT);
 
-       // Resets (only if attribute exists)
-		if (current.containsKey("processed_at")) {
-			ean.put("#processed_at", "processed_at");
-			eav.put(":processedEmpty", AttributeValue.builder().s("").build());
-			setParts.add("#processed_at = :processedEmpty");
-			updatedFields++;
-		}
-		if (current.containsKey("is_processed")) {
-			ean.put("#is_processed", "is_processed");
-			eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
-			setParts.add("#is_processed = :zeroProcessed");
-			updatedFields++;
-		}
-		if (current.containsKey("claimed_at")) {
-			ean.put("#claimed_at", "claimed_at");
-			eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
-			setParts.add("#claimed_at = :claimedEmpty");
-			updatedFields++;
-		}
-		if (current.containsKey("is_handled")) {
-			ean.put("#is_handled", "is_handled");
-			eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
-			setParts.add("#is_handled = :zeroHandled");
-			updatedFields++;
-		}
-		if (current.containsKey("updated_date")) {
-			ean.put("#updated_date", "updated_date");
-			eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
-			setParts.add("#updated_date = :now");
-			updatedFields++;
-		}
+	        // If the item already has this attribute in any case, use that existing key (no new key creation)
+	        String canonicalKey = chooseCanonicalExistingKey(currentByLower.get(lower), rawKey);
 
-		return new BuiltUpdate(ean, eav, setParts, updatedFields);
+	        if (rawVal == null) {
+	            // REMOVE only if the attribute exists (don’t create a new key just to remove it)
+	            if (canonicalKey != null) {
+	                String n = "#n" + idx++;
+	                ean.put(n, canonicalKey);
+	                removeParts.add(n);
+	                updatedFields++;
+	            }
+	            continue;
+	        }
+
+	        AttributeValue target = toAttr(rawVal);
+
+	        if (canonicalKey != null) {
+	            // Update the existing attribute (e.g., "Status") instead of creating a new one ("status")
+	            AttributeValue existing = current.get(canonicalKey);
+	            if (existing != null && equalsAttr(existing, target)) continue;
+
+	            String n = "#n" + idx;
+	            String v = ":v" + idx;
+	            ean.put(n, canonicalKey);
+	            eav.put(v, target);
+	            setParts.add(n + " = " + v);
+	            updatedFields++;
+	            idx++;
+	        } else {
+	            // No existing attribute in any case -> create it. Choose the payload's casing (or force lower if you prefer).
+	            String createKey = rawKey; // or: lower  (if you want all-new fields to be lowercase)
+	            AttributeValue existing = current.get(createKey);
+	            if (existing != null && equalsAttr(existing, target)) continue;
+
+	            String n = "#n" + idx;
+	            String v = ":v" + idx;
+	            ean.put(n, createKey);
+	            eav.put(v, target);
+	            setParts.add(n + " = " + v);
+	            updatedFields++;
+	            idx++;
+	        }
+	    }
+
+	    // Standard resets on their canonical names
+	    {
+	        ean.put("#processed_at", "processed_at");
+	        eav.put(":processedEmpty", AttributeValue.builder().s("").build());
+	        setParts.add("#processed_at = :processedEmpty"); updatedFields++;
+
+	        ean.put("#is_processed", "is_processed");
+	        eav.put(":zeroProcessed", AttributeValue.builder().n("0").build());
+	        setParts.add("#is_processed = :zeroProcessed"); updatedFields++;
+
+	        ean.put("#claimed_at", "claimed_at");
+	        eav.put(":claimedEmpty", AttributeValue.builder().s("").build());
+	        setParts.add("#claimed_at = :claimedEmpty"); updatedFields++;
+
+	        ean.put("#is_handled", "is_handled");
+	        eav.put(":zeroHandled", AttributeValue.builder().n("0").build());
+	        setParts.add("#is_handled = :zeroHandled"); updatedFields++;
+
+	        ean.put("#updated_date", "updated_date");
+	        eav.put(":now", AttributeValue.builder().s(GeneralUtility.nowSgt()).build());
+	        setParts.add("#updated_date = :now"); updatedFields++;
+	    }
+
+	    // Your caller should build UpdateExpression:
+	    // String updateExpr =
+	    //     (setParts.isEmpty() ? "" : "SET " + String.join(", ", setParts)) +
+	    //     (removeParts.isEmpty() ? "" : (setParts.isEmpty() ? "" : " ") + "REMOVE " + String.join(", ", removeParts));
+
+	    return new BuiltUpdate(ean, eav, setParts, updatedFields);
 	}
+
+	/**
+	 * Choose which existing key (casing) in DynamoDB to update for a given lowercase group.
+	 * Rules:
+	 *  - If variants exist, prefer a non-lowercase variant (e.g., "Status" over "status").
+	 *  - Otherwise pick the first variant.
+	 *  - If no variants, return null (means attribute doesn't exist yet).
+	 */
+	private String chooseCanonicalExistingKey(List<String> variants, String rawKey) {
+	    if (variants == null || variants.isEmpty()) return null;
+
+	    // Prefer a variant that is not all-lowercase (often the original "Status"/"Email")
+	    for (String v : variants) {
+	        if (!v.equals(v.toLowerCase(Locale.ROOT))) {
+	            return v;
+	        }
+	    }
+	    // Fall back to the first variant
+	    return variants.get(0);
+	}
+
+
+
 
 	public BuiltUpdate buildHeaderUpdateParts(Map<String, Object> payload, Map<String, AttributeValue> current) {
 		Map<String, String> ean = new LinkedHashMap<>();
