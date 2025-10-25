@@ -346,6 +346,9 @@ public class MasterdataService implements IMasterdataService {
 
 				String fileId = file.get().getId();
 				String policyId = file.get().getPolicyId();
+				
+				logger.info("fileId: "+fileId +":policyId: " + policyId);
+						
 				String domainName = file.get().getDomainName();
 				String uploadedBy = file.get().getUploadedBy();
 				int totalCount = file.get().getTotalRowsCount();
@@ -377,7 +380,7 @@ public class MasterdataService implements IMasterdataService {
 						String stgID = item.get("id").s();
 
 						if (dynamoService.claimStagingRow(stagingTableName, stgID)) {
-							logger.info("Update handled status: " + stgID);
+							logger.info("Update handled status: " + stgID +"PolicyId:"+policyId +"organizationId: "+organizationId);
 							try {
 
 								item.put("id",
@@ -505,7 +508,12 @@ public class MasterdataService implements IMasterdataService {
 
 			if (authHeader != null && !authHeader.isEmpty()) {
 				authHeader = "Bearer " + authHeader;
+				
+				logger.info("prepareJsonMessage Bearer:"+authHeader);
+				
 				PolicyRoot policyRoot = jsonReader.getValidationRules(policyId, authHeader);
+				
+				logger.info("policyRoot:"+policyRoot);
 				if (policyRoot != null) {
 
 					// Validation Rules

@@ -17,7 +17,7 @@ public class PolicyAPICall {
 	@Value("${policy.api.url}")
 	private String policyURL;
 
-	private static final Logger logger = LoggerFactory.getLogger(AdminAPICall.class);
+	private static final Logger logger = LoggerFactory.getLogger(PolicyAPICall.class);
 	 
 	public String getRuleByPolicyId(String policyId, String authorizationHeader) {
 		logger.info("Get my-policy API is calling ..");
@@ -28,6 +28,7 @@ public class PolicyAPICall {
 
 			String url = policyURL.trim() + "/my-policy";
 			logger.info(url);
+			logger.info("policyId: "+ policyId);
 
 			HttpRequest request = HttpRequest.newBuilder().uri(URI.create(url)).timeout(Duration.ofSeconds(30))
 					.header("Authorization", authorizationHeader)
@@ -36,7 +37,8 @@ public class PolicyAPICall {
 
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			responseStr = response.body();
-
+			logger.info("getRuleByPolicyId resp:"+responseStr);
+ 
 
 		} catch (Exception e) {
 			logger.error("Exception is occurred in getRuleByPolicyId ", e);

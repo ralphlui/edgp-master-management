@@ -18,7 +18,7 @@ public class OrganizationAPICall {
 	@Value("${organization.api.url}")
 	private String orgURL;
 
-	private static final Logger logger = LoggerFactory.getLogger(AdminAPICall.class);
+	private static final Logger logger = LoggerFactory.getLogger(OrganizationAPICall.class);
 	
 	public String validateActiveOrganization(String orgId, String authorizationHeader) {
 		logger.info("org detail api is calling ..");
@@ -37,7 +37,7 @@ public class OrganizationAPICall {
 			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			responseStr = response.body();
 
-			logger.info("Active org detail response.");
+			logger.info("Active org detail response."+responseStr);
 
 		} catch (Exception e) {
 			logger.error("An error occurred while fetching organization data.", e);
