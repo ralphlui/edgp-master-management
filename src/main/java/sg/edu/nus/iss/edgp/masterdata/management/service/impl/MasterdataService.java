@@ -398,11 +398,13 @@ public class MasterdataService implements IMasterdataService {
 								item.remove("is_handled");
 								item.remove("claimed_at");
 								item.remove("processed_at");
-
-								// (3) Send to SQS
+								
+								
+							
+								
 								String sqsMessage = prepareJsonMessage(item, fileId, policyId, domainName, uploadedBy);
 								if (!sqsMessage.isEmpty()) {
-									sqsPublishingService.sendRecordToQueue(sqsMessage);
+									
 									item.put("staging_id", AttributeValue.builder().s(stgID).build());
 									item.put("created_date", AttributeValue.builder().s(createdDate).build());
 									item.put("organization_id", AttributeValue.builder().s(organizationId).build());
@@ -416,8 +418,12 @@ public class MasterdataService implements IMasterdataService {
 									item.put("failed_validations",
 											AttributeValue.builder().l(Collections.emptyList()).build());
 
-									// (4) Insert into Workflow Status table
+									// (1) Insert into Workflow Status table
 									dynamoService.insertValidatedMasterData(mdataTaskTrackerTable.trim(), item);
+									
+									// (2) send to sqs
+									
+									sqsPublishingService.sendRecordToQueue(sqsMessage);
 
 									// (5) Mark file stage as processing
 									headerService.updateFileStage(fileId, FileProcessStage.PROCESSING);
